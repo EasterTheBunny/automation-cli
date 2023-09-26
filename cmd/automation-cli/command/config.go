@@ -3,6 +3,7 @@ package command
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/spf13/viper"
 
@@ -15,7 +16,20 @@ var (
 )
 
 func GetConfig(path string) (*Config, error) {
-	viper.SetConfigFile(fmt.Sprintf("%s/config.json", path))
+	filePath := fmt.Sprintf("%s/config.json", path)
+
+	_, err := os.Stat(filePath)
+
+	if os.IsNotExist(err) {
+		file, err := os.OpenFile(filePath, os.O_CREATE, 0640)
+		if err != nil {
+			return nil, err
+		}
+
+		file.Close()
+	}
+
+	viper.SetConfigFile(filePath)
 	viper.SetConfigType("json")
 
 	setViperDefaults()
