@@ -95,18 +95,6 @@ func NewDeployer(cfg *DeployerConfig) (*Deployer, error) {
 	}, nil
 }
 
-func (d *Deployer) Connect(ctx context.Context, addr string, deployable Deployable) (string, error) {
-	registryAddr, err := deployable.Connect(ctx, addr, d)
-
-	return registryAddr.Hex(), err
-}
-
-func (d *Deployer) Deploy(ctx context.Context, deployable Deployable, config VerifyContractConfig) (string, error) {
-	registryAddr, err := deployable.Deploy(ctx, d, config)
-
-	return registryAddr.Hex(), err
-}
-
 func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) {
 	nonce, err := d.Client.PendingNonceAt(ctx, d.Address)
 	if err != nil {

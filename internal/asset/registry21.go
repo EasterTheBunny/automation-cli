@@ -6,7 +6,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/easterthebunny/automation-cli/internal/util"
 	forwarder "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/automation_forwarder_logic"
 	iregistry "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/i_keeper_registry_master_wrapper_2_1"
 	logica "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/keeper_registry_logic_a_wrapper_2_1"
@@ -26,24 +25,22 @@ type RegistryV21Config struct {
 	FastGasFeedAddr string
 }
 
-type v21KeeperDeployable struct {
+type RegistryV21Deployable struct {
 	registry *iregistry.IKeeperRegistryMaster
-	cfg      *DeployerConfig
 	rCfg     *RegistryV21Config
 }
 
-func NewV21RegistryDeployable(cfg *DeployerConfig, rCfg *RegistryV21Config) *v21KeeperDeployable {
-	return &v21KeeperDeployable{
-		cfg:  cfg,
+func NewRegistryV21Deployable(rCfg *RegistryV21Config) *RegistryV21Deployable {
+	return &RegistryV21Deployable{
 		rCfg: rCfg,
 	}
 }
 
-func (d *v21KeeperDeployable) Connect(ctx context.Context, addr string, deployer *Deployer) (common.Address, error) {
+func (d *RegistryV21Deployable) Connect(ctx context.Context, addr string, deployer *Deployer) (common.Address, error) {
 	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
 }
 
-func (d *v21KeeperDeployable) Deploy(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *RegistryV21Deployable) Deploy(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
 	var registryAddr common.Address
 
 	automationForwarderLogicAddr, err := d.deployForwarder(ctx, deployer, config)
@@ -69,7 +66,7 @@ func (d *v21KeeperDeployable) Deploy(ctx context.Context, deployer *Deployer, co
 	return d.connectToInterface(ctx, registryAddr, deployer)
 }
 
-func (d *v21KeeperDeployable) connectToInterface(
+func (d *RegistryV21Deployable) connectToInterface(
 	_ context.Context,
 	addr common.Address,
 	deployer *Deployer,
@@ -84,12 +81,11 @@ func (d *v21KeeperDeployable) connectToInterface(
 	}
 
 	d.registry = contract
-	d.cfg.Version = "v2.1"
 
 	return addr, nil
 }
 
-func (d *v21KeeperDeployable) deployForwarder(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *RegistryV21Deployable) deployForwarder(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
 	var logicAddr common.Address
 
 	opts, err := deployer.BuildTxOpts(ctx)
@@ -106,12 +102,12 @@ func (d *v21KeeperDeployable) deployForwarder(ctx context.Context, deployer *Dep
 		return logicAddr, err
 	}
 
-	PrintVerifyContractCommand(config, logicAddr.String())
+	// PrintVerifyContractCommand(config, logicAddr.String())
 
 	return logicAddr, nil
 }
 
-func (d *v21KeeperDeployable) deployLogicB(
+func (d *RegistryV21Deployable) deployLogicB(
 	ctx context.Context,
 	forwarderAddr common.Address,
 	deployer *Deployer,
@@ -142,20 +138,22 @@ func (d *v21KeeperDeployable) deployLogicB(
 		return logicAddr, err
 	}
 
-	PrintVerifyContractCommand(
-		config,
-		logicAddr.String(),
-		fmt.Sprintf("%d", d.rCfg.Mode),
-		d.rCfg.LinkTokenAddr,
-		d.rCfg.LinkETHFeedAddr,
-		d.rCfg.FastGasFeedAddr,
-		forwarderAddr.String(),
-	)
+	/*
+		PrintVerifyContractCommand(
+			config,
+			logicAddr.String(),
+			fmt.Sprintf("%d", d.rCfg.Mode),
+			d.rCfg.LinkTokenAddr,
+			d.rCfg.LinkETHFeedAddr,
+			d.rCfg.FastGasFeedAddr,
+			forwarderAddr.String(),
+		)
+	*/
 
 	return logicAddr, nil
 }
 
-func (d *v21KeeperDeployable) deployLogicA(
+func (d *RegistryV21Deployable) deployLogicA(
 	ctx context.Context,
 	logicBAddr common.Address,
 	deployer *Deployer,
@@ -182,12 +180,12 @@ func (d *v21KeeperDeployable) deployLogicA(
 		return logicAddr, err
 	}
 
-	PrintVerifyContractCommand(config, logicAddr.String(), logicBAddr.String())
+	// PrintVerifyContractCommand(config, logicAddr.String(), logicBAddr.String())
 
 	return logicAddr, nil
 }
 
-func (d *v21KeeperDeployable) deployRegistry(
+func (d *RegistryV21Deployable) deployRegistry(
 	ctx context.Context,
 	logicAAddr common.Address,
 	deployer *Deployer,
@@ -214,9 +212,9 @@ func (d *v21KeeperDeployable) deployRegistry(
 		return registryAddr, err
 	}
 
-	PrintVerifyContractCommand(config, registryAddr.String(), logicAAddr.String())
+	// PrintVerifyContractCommand(config, registryAddr.String(), logicAAddr.String())
 
-	fmt.Printf("registry deployed to: %s\n", util.ExplorerLink(d.cfg.ChainID, trx.Hash()))
+	// fmt.Printf("registry deployed to: %s\n", util.ExplorerLink(deployer.Config.ChainID, trx.Hash()))
 
 	return registryAddr, nil
 }

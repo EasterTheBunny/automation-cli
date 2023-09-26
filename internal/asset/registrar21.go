@@ -17,16 +17,11 @@ type RegistrarV21Config struct {
 
 type RegistrarV21Deployable struct {
 	contract *registrar.AutomationRegistrar
-	cfg      *DeployerConfig
 	cCfg     *RegistrarV21Config
 }
 
-func NewV21RegistrarDeployable(
-	cfg *DeployerConfig,
-	cCfg *RegistrarV21Config,
-) *RegistrarV21Deployable {
+func NewRegistrarV21Deployable(cCfg *RegistrarV21Config) *RegistrarV21Deployable {
 	return &RegistrarV21Deployable{
-		cfg:  cfg,
 		cCfg: cCfg,
 	}
 }

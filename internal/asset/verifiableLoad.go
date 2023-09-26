@@ -31,16 +31,11 @@ type VerifiableLoadInteractionConfig struct {
 
 type VerifiableLoadLogTriggerDeployable struct {
 	contract *verifiableLogTrigger.VerifiableLoadLogTriggerUpkeep
-	cfg      *DeployerConfig
 	cCfg     *VerifiableLoadConfig
 }
 
-func NewVerifiableLoadLogTriggerDeployable(
-	cfg *DeployerConfig,
-	cCfg *VerifiableLoadConfig,
-) *VerifiableLoadLogTriggerDeployable {
+func NewVerifiableLoadLogTriggerDeployable(cCfg *VerifiableLoadConfig) *VerifiableLoadLogTriggerDeployable {
 	return &VerifiableLoadLogTriggerDeployable{
-		cfg:  cfg,
 		cCfg: cCfg,
 	}
 }
@@ -53,7 +48,11 @@ func (d *VerifiableLoadLogTriggerDeployable) Connect(
 	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
 }
 
-func (d *VerifiableLoadLogTriggerDeployable) Deploy(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *VerifiableLoadLogTriggerDeployable) Deploy(
+	ctx context.Context,
+	deployer *Deployer,
+	config VerifyContractConfig,
+) (common.Address, error) {
 	var contractAddr common.Address
 
 	opts, err := deployer.BuildTxOpts(ctx)
@@ -74,14 +73,16 @@ func (d *VerifiableLoadLogTriggerDeployable) Deploy(ctx context.Context, deploye
 		return contractAddr, err
 	}
 
-	PrintVerifyContractCommand(
-		config,
-		contractAddr.String(),
-		registrar.String(),
-		fmt.Sprintf("%t", d.cCfg.UseArbitrum),
-		fmt.Sprintf("%t", d.cCfg.AutoLog),
-		fmt.Sprintf("%t", d.cCfg.UseMercury),
-	)
+	/*
+		PrintVerifyContractCommand(
+			config,
+			contractAddr.String(),
+			registrar.String(),
+			fmt.Sprintf("%t", d.cCfg.UseArbitrum),
+			fmt.Sprintf("%t", d.cCfg.AutoLog),
+			fmt.Sprintf("%t", d.cCfg.UseMercury),
+		)
+	*/
 
 	return contractAddr, nil
 }
@@ -103,16 +104,11 @@ func (d *VerifiableLoadLogTriggerDeployable) connectToInterface(
 
 type VerifiableLoadConditionalDeployable struct {
 	contract *verifiableConditional.VerifiableLoadUpkeep
-	cfg      *DeployerConfig
 	cCfg     *VerifiableLoadConfig
 }
 
-func NewVerifiableLoadConditionalDeployable(
-	cfg *DeployerConfig,
-	cCfg *VerifiableLoadConfig,
-) *VerifiableLoadConditionalDeployable {
+func NewVerifiableLoadConditionalDeployable(cCfg *VerifiableLoadConfig) *VerifiableLoadConditionalDeployable {
 	return &VerifiableLoadConditionalDeployable{
-		cfg:  cfg,
 		cCfg: cCfg,
 	}
 }
@@ -125,7 +121,11 @@ func (d *VerifiableLoadConditionalDeployable) Connect(
 	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
 }
 
-func (d *VerifiableLoadConditionalDeployable) Deploy(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *VerifiableLoadConditionalDeployable) Deploy(
+	ctx context.Context,
+	deployer *Deployer,
+	config VerifyContractConfig,
+) (common.Address, error) {
 	var contractAddr common.Address
 
 	opts, err := deployer.BuildTxOpts(ctx)
