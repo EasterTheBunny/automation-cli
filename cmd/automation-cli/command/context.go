@@ -1,6 +1,10 @@
 package command
 
-import "context"
+import (
+	"context"
+
+	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
+)
 
 type contextKey int
 
@@ -27,17 +31,17 @@ func GetConfigPathFromContext(ctx context.Context) *string {
 	return &path
 }
 
-func AttachConfig(ctx context.Context, config Config) context.Context {
-	return context.WithValue(ctx, ctxConfigKey, config)
+func AttachConfig(ctx context.Context, conf config.Config) context.Context {
+	return context.WithValue(ctx, ctxConfigKey, conf)
 }
 
-func GetConfigFromContext(ctx context.Context) *Config {
+func GetConfigFromContext(ctx context.Context) *config.Config {
 	val := ctx.Value(ctxConfigKey)
 	if val == nil {
 		return nil
 	}
 
-	config, ok := val.(Config)
+	config, ok := val.(config.Config)
 	if !ok {
 		return nil
 	}

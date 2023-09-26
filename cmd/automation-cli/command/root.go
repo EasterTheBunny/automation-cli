@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 )
 
 var rootCmd = &cobra.Command{
@@ -44,12 +46,12 @@ var rootCmd = &cobra.Command{
 
 		ctx := AttachConfigPath(cmd.Context(), configPath)
 
-		config, err := GetConfig(configPath)
+		conf, err := config.GetConfig(configPath)
 		if err != nil {
 			return err
 		}
 
-		ctx = AttachConfig(ctx, *config)
+		ctx = AttachConfig(ctx, *conf)
 
 		cmd.SetContext(ctx)
 
@@ -61,7 +63,7 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("missing config path in context")
 		}
 
-		return SaveConfig(*path)
+		return config.SaveConfig(*path)
 	},
 }
 

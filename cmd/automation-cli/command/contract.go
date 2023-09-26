@@ -6,7 +6,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 	"github.com/easterthebunny/automation-cli/internal/asset"
+)
+
+var (
+	validContractNames = []string{
+		"registrar",
+		"registry",
+		"verifiable-load-log-trigger",
+		"verifiable-load-conditional",
+	}
 )
 
 var contractManagementCmd = &cobra.Command{
@@ -22,21 +32,19 @@ var contractConnectCmd = &cobra.Command{
 	Long: `Connect to existing asset at address.
 	
   Available Assets:
-    registry - base set of contracts for an automation service`,
-	ValidArgs: []string{
-		"registrar",
-		"registry",
-		"verifiable-load-log-trigger",
-		"verifiable-load-conditional",
-	},
-	Args: cobra.ExactArgs(2),
+	registrar - contract to control upkeep registry
+    registry - base set of contracts for an automation service
+	verifiable-load-log-trigger - log trigger specific verifiable load contract
+	verifiable-load-conditional - conditional trigger verifiable load contract`,
+	ValidArgs: validContractNames,
+	Args:      cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config := GetConfigFromContext(cmd.Context())
-		if config == nil {
+		conf := GetConfigFromContext(cmd.Context())
+		if conf == nil {
 			return fmt.Errorf("missing config path in context")
 		}
 
-		dConfig := GetDeployerConfig(config)
+		dConfig := config.GetDeployerConfig(conf)
 
 		deployer, err := asset.NewDeployer(&dConfig)
 		if err != nil {
@@ -46,8 +54,8 @@ var contractConnectCmd = &cobra.Command{
 		switch args[0] {
 		case "registrar":
 			deployable := asset.NewV21RegistrarDeployable(&dConfig, &asset.RegistrarV21Config{
-				RegistryAddr:  config.ServiceContract.RegistryAddress,
-				LinkTokenAddr: config.LinkContract,
+				RegistryAddr:  conf.ServiceContract.RegistryAddress,
+				LinkTokenAddr: conf.LinkContract,
 				MinLink:       0,
 			})
 
@@ -59,10 +67,10 @@ var contractConnectCmd = &cobra.Command{
 			viper.Set("service_contract.registrar_address", addr)
 		case "registry":
 			deployable := asset.NewV21RegistryDeployable(&dConfig, &asset.RegistryV21Config{
-				Mode:            GetRegistryMode(config),
-				LinkTokenAddr:   config.LinkContract,
-				LinkETHFeedAddr: config.LinkETHFeed,
-				FastGasFeedAddr: config.FastGasFeed,
+				Mode:            config.GetRegistryMode(conf),
+				LinkTokenAddr:   conf.LinkContract,
+				LinkETHFeedAddr: conf.LinkETHFeed,
+				FastGasFeedAddr: conf.FastGasFeed,
 			})
 
 			addr, err := deployer.Connect(cmd.Context(), args[1], deployable)
@@ -73,15 +81,15 @@ var contractConnectCmd = &cobra.Command{
 			viper.Set("service_contract.registry_address", addr)
 			viper.Set("service_contract.registry_version", dConfig.Version)
 		case "verifiable-load-log-trigger":
-			if config.ServiceContract.RegistrarAddress == "" || config.ServiceContract.RegistrarAddress == "0x" {
+			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return fmt.Errorf("no registrar deployed")
 			}
 
 			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
-				RegistrarAddr: config.ServiceContract.RegistrarAddress,
-				UseMercury:    config.LogTriggerLoadContract.UseMercury,
-				UseArbitrum:   config.LogTriggerLoadContract.UseArbitrum,
-				AutoLog:       config.LogTriggerLoadContract.AutoLog,
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseMercury:    conf.LogTriggerLoadContract.UseMercury,
+				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
+				AutoLog:       conf.LogTriggerLoadContract.AutoLog,
 			})
 
 			addr, err := deployer.Connect(cmd.Context(), args[1], deployable)
@@ -90,17 +98,17 @@ var contractConnectCmd = &cobra.Command{
 			}
 
 			viper.Set("log_trigger_load_contract.contract_address", addr)
-			viper.Set("log_trigger_load_contract.use_mercury", config.LogTriggerLoadContract.UseMercury)
-			viper.Set("log_trigger_load_contract.use_arbitrum", config.LogTriggerLoadContract.UseArbitrum)
-			viper.Set("log_trigger_load_contract.auto_log", config.LogTriggerLoadContract.AutoLog)
+			viper.Set("log_trigger_load_contract.use_mercury", conf.LogTriggerLoadContract.UseMercury)
+			viper.Set("log_trigger_load_contract.use_arbitrum", conf.LogTriggerLoadContract.UseArbitrum)
+			viper.Set("log_trigger_load_contract.auto_log", conf.LogTriggerLoadContract.AutoLog)
 		case "verifiable-load-conditional":
-			if config.ServiceContract.RegistrarAddress == "" || config.ServiceContract.RegistrarAddress == "0x" {
+			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return fmt.Errorf("no registrar deployed")
 			}
 
 			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
-				RegistrarAddr: config.ServiceContract.RegistrarAddress,
-				UseArbitrum:   config.ConditionalLoadContract.UseArbitrum,
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
 			})
 
 			addr, err := deployer.Connect(cmd.Context(), args[1], deployable)
@@ -109,7 +117,7 @@ var contractConnectCmd = &cobra.Command{
 			}
 
 			viper.Set("conditional_load_contract.contract_address", addr)
-			viper.Set("conditional_load_contract.use_arbitrum", config.ConditionalLoadContract.UseArbitrum)
+			viper.Set("conditional_load_contract.use_arbitrum", conf.ConditionalLoadContract.UseArbitrum)
 		}
 
 		return nil
@@ -126,20 +134,15 @@ var contractDeployCmd = &cobra.Command{
     registry - base set of contracts for an automation service
 	verifiable-load-log-trigger - log trigger specific verifiable load contract
 	verifiable-load-conditional - conditional trigger verifiable load contract`,
-	ValidArgs: []string{
-		"registrar",
-		"registry",
-		"verifiable-load-log-trigger",
-		"verifiable-load-conditional",
-	},
-	Args: cobra.ExactArgs(1),
+	ValidArgs: validContractNames,
+	Args:      cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		config := GetConfigFromContext(cmd.Context())
-		if config == nil {
+		conf := GetConfigFromContext(cmd.Context())
+		if conf == nil {
 			return fmt.Errorf("missing config path in context")
 		}
 
-		dConfig := GetDeployerConfig(config)
+		dConfig := config.GetDeployerConfig(conf)
 
 		deployer, err := asset.NewDeployer(&dConfig)
 		if err != nil {
@@ -147,17 +150,17 @@ var contractDeployCmd = &cobra.Command{
 		}
 
 		verifyConf := asset.VerifyContractConfig{
-			ContractsDir:   config.Verifier.ContractsDir,
-			NodeHTTPURL:    config.RPCHTTPURL,
-			ExplorerAPIKey: config.Verifier.ExplorerAPIKey,
-			NetworkName:    config.Verifier.NetworkName,
+			ContractsDir:   conf.Verifier.ContractsDir,
+			NodeHTTPURL:    conf.RPCHTTPURL,
+			ExplorerAPIKey: conf.Verifier.ExplorerAPIKey,
+			NetworkName:    conf.Verifier.NetworkName,
 		}
 
 		switch args[0] {
 		case "registrar":
 			deployable := asset.NewV21RegistrarDeployable(&dConfig, &asset.RegistrarV21Config{
-				RegistryAddr:  config.ServiceContract.RegistryAddress,
-				LinkTokenAddr: config.LinkContract,
+				RegistryAddr:  conf.ServiceContract.RegistryAddress,
+				LinkTokenAddr: conf.LinkContract,
 				MinLink:       0,
 			})
 
@@ -169,10 +172,10 @@ var contractDeployCmd = &cobra.Command{
 			viper.Set("service_contract.registrar_address", addr)
 		case "registry":
 			deployable := asset.NewV21RegistryDeployable(&dConfig, &asset.RegistryV21Config{
-				Mode:            GetRegistryMode(config),
-				LinkTokenAddr:   config.LinkContract,
-				LinkETHFeedAddr: config.LinkETHFeed,
-				FastGasFeedAddr: config.FastGasFeed,
+				Mode:            config.GetRegistryMode(conf),
+				LinkTokenAddr:   conf.LinkContract,
+				LinkETHFeedAddr: conf.LinkETHFeed,
+				FastGasFeedAddr: conf.FastGasFeed,
 			})
 
 			addr, err := deployer.Deploy(cmd.Context(), deployable, verifyConf)
@@ -183,15 +186,15 @@ var contractDeployCmd = &cobra.Command{
 			viper.Set("service_contract.registry_address", addr)
 			viper.Set("service_contract.registry_version", dConfig.Version)
 		case "verifiable-load-log-trigger":
-			if config.ServiceContract.RegistrarAddress == "" || config.ServiceContract.RegistrarAddress == "0x" {
+			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return fmt.Errorf("no registrar deployed")
 			}
 
 			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
-				RegistrarAddr: config.ServiceContract.RegistrarAddress,
-				UseMercury:    config.LogTriggerLoadContract.UseMercury,
-				UseArbitrum:   config.LogTriggerLoadContract.UseArbitrum,
-				AutoLog:       config.LogTriggerLoadContract.AutoLog,
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseMercury:    conf.LogTriggerLoadContract.UseMercury,
+				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
+				AutoLog:       conf.LogTriggerLoadContract.AutoLog,
 			})
 
 			addr, err := deployer.Deploy(cmd.Context(), deployable, verifyConf)
@@ -200,17 +203,17 @@ var contractDeployCmd = &cobra.Command{
 			}
 
 			viper.Set("log_trigger_load_contract.contract_address", addr)
-			viper.Set("log_trigger_load_contract.use_mercury", config.LogTriggerLoadContract.UseMercury)
-			viper.Set("log_trigger_load_contract.use_arbitrum", config.LogTriggerLoadContract.UseArbitrum)
-			viper.Set("log_trigger_load_contract.auto_log", config.LogTriggerLoadContract.AutoLog)
+			viper.Set("log_trigger_load_contract.use_mercury", conf.LogTriggerLoadContract.UseMercury)
+			viper.Set("log_trigger_load_contract.use_arbitrum", conf.LogTriggerLoadContract.UseArbitrum)
+			viper.Set("log_trigger_load_contract.auto_log", conf.LogTriggerLoadContract.AutoLog)
 		case "verifiable-load-conditional":
-			if config.ServiceContract.RegistrarAddress == "" || config.ServiceContract.RegistrarAddress == "0x" {
+			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return fmt.Errorf("no registrar deployed")
 			}
 
 			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
-				RegistrarAddr: config.ServiceContract.RegistrarAddress,
-				UseArbitrum:   config.ConditionalLoadContract.UseArbitrum,
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
 			})
 
 			addr, err := deployer.Deploy(cmd.Context(), deployable, verifyConf)
@@ -219,7 +222,7 @@ var contractDeployCmd = &cobra.Command{
 			}
 
 			viper.Set("conditional_load_contract.contract_address", addr)
-			viper.Set("conditional_load_contract.use_arbitrum", config.ConditionalLoadContract.UseArbitrum)
+			viper.Set("conditional_load_contract.use_arbitrum", conf.ConditionalLoadContract.UseArbitrum)
 		}
 
 		return nil
