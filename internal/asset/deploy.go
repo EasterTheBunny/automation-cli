@@ -51,13 +51,13 @@ type DeployerConfig struct {
 }
 
 type Deployer struct {
-	Config *DeployerConfig
-	RPC    *rpc.Client
-	Client *ethclient.Client
+	Config  *DeployerConfig
+	RPC     *rpc.Client
+	Client  *ethclient.Client
+	Address common.Address
 
 	privateKey *ecdsa.PrivateKey
 	linkToken  *link.LinkToken
-	addr       common.Address
 }
 
 // NewDeployer creates a new deployer and sets the primary address to
@@ -89,9 +89,9 @@ func NewDeployer(cfg *DeployerConfig) (*Deployer, error) {
 		Config:     cfg,
 		RPC:        rpcClient,
 		Client:     nodeClient,
+		Address:    address,
 		privateKey: privateKey,
 		linkToken:  linkToken,
-		addr:       address,
 	}, nil
 }
 
@@ -108,11 +108,11 @@ func (d *Deployer) Deploy(ctx context.Context, deployable Deployable, config Ver
 }
 
 func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) {
-	nonce, err := d.Client.PendingNonceAt(ctx, d.addr)
+	nonce, err := d.Client.PendingNonceAt(ctx, d.Address)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%w: PendingNonceAt failure for address (%s): %s",
-			ErrClientInteraction, d.addr.Hex(), err.Error())
+			ErrClientInteraction, d.Address.Hex(), err.Error())
 	}
 
 	gasPrice, err := d.Client.SuggestGasPrice(ctx)

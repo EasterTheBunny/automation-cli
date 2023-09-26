@@ -73,6 +73,7 @@ func InitializeCommands() {
 
 	contractManagementCmd.AddCommand(contractConnectCmd)
 	contractManagementCmd.AddCommand(contractDeployCmd)
+	contractManagementCmd.AddCommand(contractInteractCmd)
 
 	networkManagementCmd.AddCommand(networkAddCmd)
 

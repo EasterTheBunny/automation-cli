@@ -106,7 +106,7 @@ var contractConnectCmd = &cobra.Command{
 				return fmt.Errorf("no registrar deployed")
 			}
 
-			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
+			deployable := asset.NewVerifiableLoadConditionalDeployable(&dConfig, &asset.VerifiableLoadConfig{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
 			})
@@ -211,7 +211,7 @@ var contractDeployCmd = &cobra.Command{
 				return fmt.Errorf("no registrar deployed")
 			}
 
-			deployable := asset.NewVerifiableLoadLogTriggerDeployable(&dConfig, &asset.VerifiableLoadConfig{
+			deployable := asset.NewVerifiableLoadConditionalDeployable(&dConfig, &asset.VerifiableLoadConfig{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
 			})
@@ -223,6 +223,47 @@ var contractDeployCmd = &cobra.Command{
 
 			viper.Set("conditional_load_contract.contract_address", addr)
 			viper.Set("conditional_load_contract.use_arbitrum", conf.ConditionalLoadContract.UseArbitrum)
+		}
+
+		return nil
+	},
+}
+
+var contractInteractCmd = &cobra.Command{
+	Use:       "interact [NAME] [ACTION]",
+	Short:     "Run pre-defined actions for contract",
+	Long:      `Interact with contracts and run pre-packaged actions. This is not inclusive of all commands possible to run`,
+	Args:      cobra.ExactArgs(2),
+	ValidArgs: []string{"verifiable-load-conditional", "get-stats"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		conf := GetConfigFromContext(cmd.Context())
+		if conf == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
+		dConfig := config.GetDeployerConfig(conf)
+
+		deployer, err := asset.NewDeployer(&dConfig)
+		if err != nil {
+			return err
+		}
+
+		switch args[0] {
+		case "verifiable-load-conditional":
+			if args[1] != "get-stats" {
+				return fmt.Errorf("invalid action")
+			}
+
+			interactable := asset.NewVerifiableLoadConditionalDeployable(&dConfig, &asset.VerifiableLoadConfig{
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
+			})
+
+			if err := interactable.ReadStats(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
+				ContractAddr: conf.ConditionalLoadContract.ContractAddress,
+			}); err != nil {
+				return err
+			}
 		}
 
 		return nil
