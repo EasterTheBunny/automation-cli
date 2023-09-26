@@ -1,4 +1,4 @@
-package main
+package command
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ var (
 )
 
 func GetConfig(path string) (*Config, error) {
-	viper.SetConfigFile(path)
+	viper.SetConfigFile(fmt.Sprintf("%s/config.json", path))
 	viper.SetConfigType("json")
 
 	setViperDefaults()
@@ -38,7 +38,7 @@ func GetConfig(path string) (*Config, error) {
 }
 
 func SaveConfig(path string) error {
-	if err := viper.WriteConfigAs(path); err != nil {
+	if err := viper.WriteConfigAs(fmt.Sprintf("%s/config.json", path)); err != nil {
 		return fmt.Errorf("%w: %s", ErrWriteConfig, err.Error())
 	}
 

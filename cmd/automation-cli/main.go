@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/easterthebunny/automation-cli/cmd/automation-cli/command"
 )
 
 func main() {
-	InitializeCommands()
+	command.InitializeCommands()
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := command.Run(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}

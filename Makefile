@@ -18,6 +18,9 @@ race: dependencies
 build: dependencies 
 	go build -o $(GOBIN)/automation-cli ./cmd/automation-cli/*.go || exit
 
+install: dependencies
+	go install ./cmd/automation-cli/*.go || exit
+
 default: build
 
-.PHONY: dependencies test race build
+.PHONY: dependencies test race build install
