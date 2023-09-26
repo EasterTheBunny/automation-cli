@@ -2,7 +2,6 @@ package command
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -20,7 +19,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		if err := os.MkdirAll(filepath.Dir(configPath), fs.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(configPath), 0660); err != nil {
 			return err
 		}
 
