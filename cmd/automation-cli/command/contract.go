@@ -55,6 +55,19 @@ var contractConnectCmd = &cobra.Command{
 
 		dConfig := config.GetDeployerConfig(conf)
 
+		keyConf := GetKeyConfigFromContext(cmd.Context())
+		if keyConf == nil {
+			return fmt.Errorf("missing private key config")
+		}
+
+		for _, key := range keyConf.Keys {
+			if key.Alias == dConfig.PrivateKey {
+				dConfig.PrivateKey = key.Value
+
+				break
+			}
+		}
+
 		deployer, err := asset.NewDeployer(&dConfig)
 		if err != nil {
 			return err
@@ -152,6 +165,19 @@ var contractDeployCmd = &cobra.Command{
 		}
 
 		dConfig := config.GetDeployerConfig(conf)
+
+		keyConf := GetKeyConfigFromContext(cmd.Context())
+		if keyConf == nil {
+			return fmt.Errorf("missing private key config")
+		}
+
+		for _, key := range keyConf.Keys {
+			if key.Alias == dConfig.PrivateKey {
+				dConfig.PrivateKey = key.Value
+
+				break
+			}
+		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
 		if err != nil {
@@ -251,6 +277,19 @@ var contractInteractCmd = &cobra.Command{
 		}
 
 		dConfig := config.GetDeployerConfig(conf)
+
+		keyConf := GetKeyConfigFromContext(cmd.Context())
+		if keyConf == nil {
+			return fmt.Errorf("missing private key config")
+		}
+
+		for _, key := range keyConf.Keys {
+			if key.Alias == dConfig.PrivateKey {
+				dConfig.PrivateKey = key.Value
+
+				break
+			}
+		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
 		if err != nil {

@@ -52,6 +52,13 @@ var rootCmd = &cobra.Command{
 
 		ctx = AttachConfig(ctx, *conf)
 
+		keyConf, err := config.GetPrivateKeyConfig(configPath)
+		if err != nil {
+			return err
+		}
+
+		ctx = AttachKeyConfig(ctx, *keyConf)
+
 		cmd.SetContext(ctx)
 
 		return nil
@@ -78,6 +85,9 @@ func InitializeCommands() {
 	networkManagementCmd.AddCommand(networkAddCmd)
 
 	configCmd.AddCommand(configSetVarCmd)
+	configCmd.AddCommand(configGetVarCmd)
+	configCmd.AddCommand(configSetupCmd)
+	configCmd.AddCommand(configStorePKCmd)
 
 	_ = rootCmd.PersistentFlags().String(
 		"state-directory",

@@ -79,6 +79,32 @@ func nodeRequest(client HTTPClient, path string) ([]byte, error) {
 	return raw, nil
 }
 
+type EthKeyPresenter struct {
+	Address string `json:"address"`
+}
+
+type EthKeyPresenters []EthKeyPresenter
+
+// getNodeAddress returns chainlink node's wallet address
+func getNodeAddress(client HTTPClient) (string, error) {
+	rawResponse, err := nodeRequest(client, ethKeysEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to get ETH keys: %w", err)
+	}
+
+	var response dataResponse
+	if err := json.Unmarshal(rawResponse, &response); err != nil {
+		return "", fmt.Errorf("not a data response: %w", err)
+	}
+
+	var keys EthKeyPresenters
+	if err = json.Unmarshal(response.Data, &keys); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response body: %w", err)
+	}
+
+	return keys[0].Address, nil
+}
+
 type dataResponse struct {
 	Data json.RawMessage `json:"data"`
 }
