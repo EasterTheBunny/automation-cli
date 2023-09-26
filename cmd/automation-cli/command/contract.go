@@ -31,14 +31,9 @@ var contractConnectCmd = &cobra.Command{
 	},
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, err := cmd.Flags().GetString("config")
-		if err != nil {
-			return err
-		}
-
-		config, err := GetConfig(configPath)
-		if err != nil {
-			return err
+		config := GetConfigFromContext(cmd.Context())
+		if config == nil {
+			return fmt.Errorf("missing config path in context")
 		}
 
 		dConfig := GetDeployerConfig(config)
@@ -117,7 +112,7 @@ var contractConnectCmd = &cobra.Command{
 			viper.Set("conditional_load_contract.use_arbitrum", config.ConditionalLoadContract.UseArbitrum)
 		}
 
-		return SaveConfig(configPath)
+		return nil
 	},
 }
 
@@ -139,14 +134,9 @@ var contractDeployCmd = &cobra.Command{
 	},
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, err := cmd.Flags().GetString("config")
-		if err != nil {
-			return err
-		}
-
-		config, err := GetConfig(configPath)
-		if err != nil {
-			return err
+		config := GetConfigFromContext(cmd.Context())
+		if config == nil {
+			return fmt.Errorf("missing config path in context")
 		}
 
 		dConfig := GetDeployerConfig(config)
@@ -232,6 +222,6 @@ var contractDeployCmd = &cobra.Command{
 			viper.Set("conditional_load_contract.use_arbitrum", config.ConditionalLoadContract.UseArbitrum)
 		}
 
-		return SaveConfig(configPath)
+		return nil
 	},
 }

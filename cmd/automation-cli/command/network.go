@@ -23,14 +23,9 @@ var networkAddCmd = &cobra.Command{
 	ValidArgs: []string{"bootstrap", "participant"},
 	Args:      cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath, err := cmd.Flags().GetString("config")
-		if err != nil {
-			return err
-		}
-
-		config, err := GetConfig(configPath)
-		if err != nil {
-			return err
+		config := GetConfigFromContext(cmd.Context())
+		if config == nil {
+			return fmt.Errorf("missing config path in context")
 		}
 
 		switch args[0] {
@@ -62,6 +57,6 @@ var networkAddCmd = &cobra.Command{
 			return fmt.Errorf("unrecognized argument: %s", args[0])
 		}
 
-		return SaveConfig(configPath)
+		return nil
 	},
 }
