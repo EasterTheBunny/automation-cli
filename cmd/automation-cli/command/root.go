@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 )
@@ -67,18 +66,6 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-var configCmd = &cobra.Command{
-	Use:   "set-config-var [NAME] [VALUE]",
-	Short: "Shortcut to quickly update config var",
-	Long:  `Update config variable by name. Only accepts lower case and '.' between nested values.`,
-	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		viper.Set(args[0], args[1])
-
-		return nil
-	},
-}
-
 func InitializeCommands() {
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(contractManagementCmd)
@@ -88,6 +75,8 @@ func InitializeCommands() {
 	contractManagementCmd.AddCommand(contractDeployCmd)
 
 	networkManagementCmd.AddCommand(networkAddCmd)
+
+	configCmd.AddCommand(configSetVarCmd)
 
 	_ = rootCmd.PersistentFlags().String(
 		"state-directory",
