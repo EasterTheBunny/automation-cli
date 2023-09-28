@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/viper"
 
@@ -48,11 +50,65 @@ func GetConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("%w, %s", ErrReadConfig, err.Error())
 	}
 
+	if len(config.Nodes) == 0 {
+		config.Nodes = []string{}
+	}
+
 	return &config, nil
+}
+
+func GetNodeConfig(path string) (*NodeConfig, *viper.Viper, error) {
+	configPath := fmt.Sprintf("%s/config.json", path)
+
+	_, err := os.Stat(configPath)
+
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(configPath), fs.ModePerm); err != nil {
+			return nil, nil, err
+		}
+
+		file, err := os.OpenFile(configPath, os.O_CREATE, 0640)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		file.Close()
+	}
+
+	vpr := viper.New()
+
+	vpr.SetConfigFile(configPath)
+	vpr.SetConfigType("json")
+
+	setNodeConfigDefaults(vpr)
+
+	if err := vpr.ReadInConfig(); err != nil {
+		if errors.As(err, &viper.ConfigFileNotFoundError{}) {
+			if err := vpr.WriteConfigAs(path); err != nil {
+				return nil, nil, fmt.Errorf("%w: %s", ErrWriteConfig, err.Error())
+			}
+		}
+	}
+
+	var config NodeConfig
+
+	if err := vpr.Unmarshal(&config); err != nil {
+		return nil, nil, fmt.Errorf("%w, %s", ErrReadConfig, err.Error())
+	}
+
+	return nil, vpr, nil
 }
 
 func SaveConfig(path string) error {
 	if err := viper.WriteConfigAs(fmt.Sprintf("%s/config.json", path)); err != nil {
+		return fmt.Errorf("%w: %s", ErrWriteConfig, err.Error())
+	}
+
+	return nil
+}
+
+func SaveViperConfig(vpr *viper.Viper, path string) error {
+	if err := vpr.WriteConfigAs(fmt.Sprintf("%s/config.json", path)); err != nil {
 		return fmt.Errorf("%w: %s", ErrWriteConfig, err.Error())
 	}
 
@@ -104,9 +160,17 @@ func setViperDefaults() {
 	viper.SetDefault("conditional_load_contract.contract_address", "0x")
 	viper.SetDefault("conditional_load_contract.use_arbitrum", false)
 
+	viper.SetDefault("nodes", []string{})
+
 	viper.SetDefault("verifier.contracts_directory", "")
 	viper.SetDefault("verifier.explorer_api_key", "")
 	viper.SetDefault("verifier.network_name", "")
+}
+
+func setNodeConfigDefaults(vpr *viper.Viper) {
+	vpr.SetDefault("chainlink_image", "chainlink:latest")
+	vpr.SetDefault("management_url", "")
+	vpr.SetDefault("address", "")
 }
 
 type Config struct {
@@ -122,7 +186,7 @@ type Config struct {
 	ServiceContract         ServiceContract         `mapstructure:"service_contract"`
 	LogTriggerLoadContract  LogTriggerLoadContract  `mapstructure:"log_trigger_load_contract"`
 	ConditionalLoadContract ConditionalLoadContract `mapstructure:"conditional_load_contract"`
-	Nodes                   []Node                  `mapstructure:"nodes"`
+	Nodes                   []string                `mapstructure:"nodes"`
 	Verifier                Verifier                `mapstructure:"verifier"`
 }
 
@@ -145,8 +209,10 @@ type ConditionalLoadContract struct {
 	UseArbitrum     bool   `mapstructure:"use_arbitrum"`
 }
 
-type Node struct {
+type NodeConfig struct {
 	ChainlinkImage string `mapstructure:"chainlink_image"`
+	ManagementURL  string `mapstructure:"management_url"`
+	Address        string `mapstructure:"address"`
 }
 
 type Verifier struct {

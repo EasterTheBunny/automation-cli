@@ -29,6 +29,7 @@ func CreateBootstrapNode(
 	conf NodeConfig,
 	groupname, image, addr string,
 	uiPort, p2pv2Port int,
+	path string,
 	reset bool,
 ) (string, error) {
 	const containerName = "bootstrap"
@@ -36,7 +37,7 @@ func CreateBootstrapNode(
 	node, err := buildChainlinkNode(
 		ctx, io.Discard, conf,
 		uint16(uiPort), groupname, containerName, image,
-		fmt.Sprintf(bootstrapTOML, strconv.Itoa(p2pv2Port)), reset,
+		fmt.Sprintf(bootstrapTOML, strconv.Itoa(p2pv2Port)), path, reset,
 	)
 	if err != nil {
 		return "", err

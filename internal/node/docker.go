@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"time"
 
@@ -41,6 +40,7 @@ func buildChainlinkNode(
 	port uint16,
 	group, container, image string,
 	extraTOML string,
+	basePath string,
 	reset bool,
 ) (*ChainlinkNode, error) {
 	node, err := newNode(ctx, progress, group, container, image, port)
@@ -64,7 +64,7 @@ func buildChainlinkNode(
 		return nil, err
 	}
 
-	if err := ensureChainlinkContainer(ctx, node, conf, extraTOML, false); err != nil {
+	if err := ensureChainlinkContainer(ctx, node, conf, extraTOML, basePath, false); err != nil {
 		return nil, err
 	}
 
@@ -251,6 +251,7 @@ func ensureChainlinkContainer(
 	node *ChainlinkNode,
 	conf NodeConfig,
 	extraTOML string,
+	basePath string,
 	reset bool,
 ) error {
 	if reset && node.chainlink.id != "" {
@@ -270,10 +271,7 @@ func ensureChainlinkContainer(
 		portStr := fmt.Sprintf("%d", node.chainlink.port)
 		port := nat.Port(portStr)
 
-		path, err := filepath.Abs("./.secrets")
-		if err != nil {
-			return err
-		}
+		path := fmt.Sprintf("%s/secrets", basePath)
 
 		if err := writeCredentials(path); err != nil {
 			return fmt.Errorf("failed to create creds files: %w", err)

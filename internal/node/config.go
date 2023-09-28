@@ -35,10 +35,34 @@ HTTPURL = '%s'
 `
 	secretTOML = `
 [Mercury.Credentials.cred1]
+LegacyURL = '%s'
 URL = '%s'
 Username = '%s'
 Password = '%s'
 `
+
+	ocr2AutomationJobTemplate = `type = "offchainreporting2"
+pluginType = "ocr2automation"
+relay = "evm"
+name = "ocr2-automation"
+forwardingAllowed = false
+schemaVersion = 1
+contractID = "%s"
+contractConfigTrackerPollInterval = "15s"
+ocrKeyBundleID = "%s"
+transmitterID = "%s"
+p2pv2Bootstrappers = [
+  "%s"
+]
+
+[relayConfig]
+chainID = %d
+
+[pluginConfig]
+maxServiceWorkers = 100
+cacheEvictionInterval = "1s"
+contractVersion = "%s"
+mercuryCredentialName = "%s"`
 )
 
 type NodeConfig struct {
@@ -46,9 +70,10 @@ type NodeConfig struct {
 	NodeWSSURL  string
 	NodeHttpURL string
 
-	MercuryURL string
-	MercuryID  string
-	MercuryKey string
+	MercuryLegacyURL string
+	MercuryURL       string
+	MercuryID        string
+	MercuryKey       string
 }
 
 func NodeTOML(conf NodeConfig) string {
@@ -56,5 +81,5 @@ func NodeTOML(conf NodeConfig) string {
 }
 
 func SecretTOML(conf NodeConfig) string {
-	return fmt.Sprintf(secretTOML, conf.MercuryURL, conf.MercuryID, conf.MercuryKey)
+	return fmt.Sprintf(secretTOML, conf.MercuryLegacyURL, conf.MercuryURL, conf.MercuryID, conf.MercuryKey)
 }

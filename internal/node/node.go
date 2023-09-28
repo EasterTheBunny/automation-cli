@@ -13,6 +13,7 @@ type ChainlinkNode struct {
 	PostgresImage  string
 	ChainlinkImage string
 	GroupName      string
+	Address        string
 
 	client    *client.Client
 	writer    io.Writer

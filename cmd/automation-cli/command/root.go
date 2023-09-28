@@ -21,6 +21,11 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
+		env, err := cmd.Flags().GetString("environment")
+		if err != nil {
+			return err
+		}
+
 		// check if starts with ~/ and replace with home directory
 		if strings.HasPrefix(configPath, "~/") {
 			home, err := os.UserHomeDir()
@@ -30,6 +35,9 @@ var rootCmd = &cobra.Command{
 
 			configPath = strings.Replace(configPath, "~", home, 1)
 		}
+
+		privateKeyPath := configPath
+		configPath = fmt.Sprintf("%s/%s", configPath, env)
 
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			abs, err := filepath.Abs(configPath)
@@ -52,7 +60,7 @@ var rootCmd = &cobra.Command{
 
 		ctx = AttachConfig(ctx, *conf)
 
-		keyConf, err := config.GetPrivateKeyConfig(configPath)
+		keyConf, err := config.GetPrivateKeyConfig(privateKeyPath)
 		if err != nil {
 			return err
 		}
@@ -95,10 +103,21 @@ func InitializeCommands() {
 		"directory to store cli configuration and persisted state",
 	)
 
+	_ = rootCmd.PersistentFlags().String(
+		"environment",
+		"default",
+		"scope for cli configuration and persisted state",
+	)
+
 	_ = contractDeployCmd.Flags().
 		String("mode", "DEFAULT", "registry mode (applies to v2.x; valid options are DEFAULT, ARBITRUM, OPTIMISM)")
 
 	_ = networkAddCmd.Flags().Int8("count", 1, "total number of nodes to create with this configuration")
+	_ = networkAddCmd.Flags().String(
+		"with-private-key",
+		"default",
+		"use a specific private key. use only an alias for a previously saved private key.",
+	)
 }
 
 func Run() error {

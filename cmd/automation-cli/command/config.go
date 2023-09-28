@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
@@ -67,30 +68,45 @@ var configSetupCmd = &cobra.Command{
 
 		chainIDStr, _ := reader.ReadString('\n')
 
-		chainID, err := strconv.ParseInt(chainIDStr, 10, 64)
-		if err != nil {
-			return err
-		}
+		if len(strings.Trim(chainIDStr, "\n")) == 0 {
+			viper.Set("chain_id", 1337)
+		} else {
+			chainID, err := strconv.ParseInt(strings.Trim(chainIDStr, "\n"), 10, 64)
+			if err != nil {
+				return err
+			}
 
-		viper.Set("chain_id", chainID)
+			viper.Set("chain_id", chainID)
+		}
 
 		fmt.Fprint(cmd.OutOrStdout(), "Enter Private Key [default]: ")
 
 		privKeyStr, _ := reader.ReadString('\n')
 
-		viper.Set("private_key", privKeyStr)
+		if len(strings.Trim(privKeyStr, "\n")) == 0 {
+			viper.Set("private_key", "default")
+		} else {
+			viper.Set("private_key", strings.Trim(privKeyStr, "\n"))
+		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Enter the RPC HTTP URL []: ")
+		fmt.Fprintf(cmd.OutOrStdout(), "Enter the RPC HTTP URL: ")
 
 		httpRPC, _ := reader.ReadString('\n')
 
-		viper.Set("rpc_http_url", httpRPC)
+		viper.Set("rpc_http_url", strings.Trim(httpRPC, "\n"))
 
-		fmt.Fprintf(cmd.OutOrStdout(), "Enter the RPC WSS URL []: ")
+		fmt.Fprintf(cmd.OutOrStdout(), "Enter the RPC WSS URL: ")
 
 		httpWSS, _ := reader.ReadString('\n')
 
-		viper.Set("rpc_wss_url", httpWSS)
+		viper.Set("rpc_wss_url", strings.Trim(httpWSS, "\n"))
+
+		env, err := cmd.Flags().GetString("environment")
+		if err != nil {
+			return err
+		}
+
+		viper.Set("groupname", env)
 
 		return nil
 	},
