@@ -297,6 +297,43 @@ var contractInteractCmd = &cobra.Command{
 		}
 
 		switch args[0] {
+		/*
+			case Registry:
+				if args[1] != "set-config" {
+					return fmt.Errorf("invalid action")
+				}
+
+				interactable := asset.NewRegistryV21Deployable(&asset.RegistryV21Config{
+					Mode:            config.GetRegistryMode(conf),
+					LinkTokenAddr:   conf.LinkContract,
+					LinkETHFeedAddr: conf.LinkETHFeed,
+					FastGasFeedAddr: conf.FastGasFeed,
+				})
+
+				nodeConfs := make([]asset.OCR2NodeConfig, len(conf.Nodes))
+
+				// TODO: get all node configs
+				for idx, node := range conf.Nodes {
+					nodeConfs[idx] = asset.OCR2NodeConfig{}
+				}
+
+				interactable.SetOffchainConfig(cmd.Context(), deployer, nodeConfs, asset.OCR3NetworkConfig{}, asset.AutomationV21OffchainConfig{})
+		*/
+		case VerifiableLoadLogTrigger:
+			if args[1] != "get-stats" {
+				return fmt.Errorf("invalid action")
+			}
+
+			interactable := asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
+			})
+
+			if err := interactable.ReadStats(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
+				ContractAddr: conf.ConditionalLoadContract.ContractAddress,
+			}); err != nil {
+				return err
+			}
 		case VerifiableLoadConditional:
 			if args[1] != "get-stats" {
 				return fmt.Errorf("invalid action")

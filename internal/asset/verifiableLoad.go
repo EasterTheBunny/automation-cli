@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/montanaflynn/stats"
 
+	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_log_trigger_upkeep_wrapper"
 	verifiableLogTrigger "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_log_trigger_upkeep_wrapper"
 	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_upkeep_wrapper"
 	verifiableConditional "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_upkeep_wrapper"
@@ -85,6 +86,75 @@ func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 	*/
 
 	return contractAddr, nil
+}
+
+func (d *VerifiableLoadLogTriggerDeployable) ReadStats(ctx context.Context, deployer *Deployer, conf VerifiableLoadInteractionConfig) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiable_load_log_trigger_upkeep_wrapper.NewVerifiableLoadLogTriggerUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	// get all the stats from this block
+	blockNum, err := deployer.Client.BlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get block number: %s", err.Error())
+	}
+
+	opts := &bind.CallOpts{
+		From:        deployer.Address,
+		Context:     ctx,
+		BlockNumber: big.NewInt(int64(blockNum)),
+	}
+
+	// get all active upkeep IDs on this verifiable load contract
+	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
+	if err != nil {
+		return fmt.Errorf("failed to get active upkeep IDs from %s: %s", addr, err.Error())
+	}
+
+	us := &upkeepStats{BlockNumber: blockNum}
+
+	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
+	idChan := make(chan *big.Int, maxUpkeepNum)
+
+	var wg sync.WaitGroup
+
+	// create a number of workers to process the upkeep ids in batch
+	for i := 0; i < workerNum; i++ {
+		wg.Add(1)
+		go getUpkeepInfo(idChan, resultsChan, contract, opts, &wg)
+	}
+
+	for _, id := range upkeepIds {
+		idChan <- id
+	}
+
+	close(idChan)
+	wg.Wait()
+
+	close(resultsChan)
+
+	for info := range resultsChan {
+		us.AllInfos = append(us.AllInfos, info)
+		us.TotalPerforms += info.TotalPerforms
+		us.TotalDelayBlock += info.TotalDelayBlock
+		us.SortedAllDelays = append(us.SortedAllDelays, info.SortedAllDelays...)
+	}
+
+	sort.Float64s(us.SortedAllDelays)
+
+	log.Println("\n\n================================== ALL UPKEEPS SUMMARY =======================================================")
+	p50, _ := stats.Percentile(us.SortedAllDelays, 50)
+	p90, _ := stats.Percentile(us.SortedAllDelays, 90)
+	p95, _ := stats.Percentile(us.SortedAllDelays, 95)
+	p99, _ := stats.Percentile(us.SortedAllDelays, 99)
+	maxDelay := us.SortedAllDelays[len(us.SortedAllDelays)-1]
+	log.Printf("For total %d upkeeps: total performs: %d, p50: %f, p90: %f, p95: %f, p99: %f, max delay: %f, total delay blocks: %f, average perform delay: %f\n", len(upkeepIds), us.TotalPerforms, p50, p90, p95, p99, maxDelay, us.TotalDelayBlock, us.TotalDelayBlock/float64(us.TotalPerforms))
+	log.Printf("All STATS ABOVE ARE CALCULATED AT BLOCK %d", blockNum)
+
+	return nil
 }
 
 func (d *VerifiableLoadLogTriggerDeployable) connectToInterface(
@@ -278,7 +348,13 @@ func (d *VerifiableLoadConditionalDeployable) connectToInterface(
 	return addr, nil
 }
 
-func getUpkeepInfo(idChan chan *big.Int, resultsChan chan *upkeepInfo, contract *verifiableConditional.VerifiableLoadUpkeep, opts *bind.CallOpts, wg *sync.WaitGroup) {
+type verifiableLoadContract interface {
+	Counters(*bind.CallOpts, *big.Int) (*big.Int, error)
+	Buckets(*bind.CallOpts, *big.Int) (uint16, error)
+	GetBucketedDelays(*bind.CallOpts, *big.Int, uint16) ([]*big.Int, error)
+}
+
+func getUpkeepInfo(idChan chan *big.Int, resultsChan chan *upkeepInfo, contract verifiableLoadContract, opts *bind.CallOpts, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for id := range idChan {
@@ -331,7 +407,7 @@ func getUpkeepInfo(idChan chan *big.Int, resultsChan chan *upkeepInfo, contract 
 	}
 }
 
-func getBucketData(contract *verifiableConditional.VerifiableLoadUpkeep, opts *bind.CallOpts, id *big.Int, bucketNum uint16, wg *sync.WaitGroup, info *upkeepInfo) {
+func getBucketData(contract verifiableLoadContract, opts *bind.CallOpts, id *big.Int, bucketNum uint16, wg *sync.WaitGroup, info *upkeepInfo) {
 	defer wg.Done()
 
 	var bucketDelays []*big.Int

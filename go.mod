@@ -9,6 +9,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/montanaflynn/stats v0.7.1
 	github.com/smartcontractkit/chainlink/v2 v2.5.0
+	github.com/smartcontractkit/libocr v0.0.0-20230816220705-665e93233ae5
+	github.com/smartcontractkit/ocr2keepers v0.7.17
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/viper v1.16.0
 	golang.org/x/term v0.11.0
@@ -20,7 +22,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/btcsuite/btcd v0.23.4 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2 // indirect
-	github.com/cespare/cp v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cometbft/cometbft-db v0.8.0 // indirect
 	github.com/cosmos/ics23/go v0.10.0 // indirect

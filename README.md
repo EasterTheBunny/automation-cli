@@ -41,3 +41,43 @@ the alias and not the actual private key:
 ```
 automation-cli config setup --environment="some.environment"
 ```
+
+## Contract Management
+Generally you can connect to existing contracts or deploy new ones.
+
+### Connect to Existing
+If you know the address of an existing contract and just want to connect and store that contract for future use in the
+CLI tool, use the following command. Remember to define your environment or it will select the default (default).
+
+```
+automation-cli contract connect registry [ADDRESS] --environment"some.environment"
+```
+
+You can get help on the available contract types that you can connect to:
+
+```
+automation-cli contract connect -h
+```
+
+### Deploying Contracts
+Deploying contracts uses a similar method, but will save the resulting contract address to the environment config state.
+
+```
+automation-cli contract deploy registry --environment="some.environment"
+```
+
+This command will use the existing configuration within the environment to deploy a contract. Some contracts require
+specific configurations and at the moment you will need to set these configurations manually in the state directory.
+
+### Interactions
+Some contracts have interactions you can do through the CLI tool. These interactions are not intended to replace 
+interacting with a contract using a wallet and browser, but instead roll up more complex interactions into simple
+commands. An example interaction follows where statistics are printed from a verifiable load contract:
+
+```
+# connect to the verifiable load contract first if you haven't already
+automation-cli contract connect verifiable-load-conditional [ADDRESS]
+
+# run an interaction against the contract
+automation-cli contract interact verifiable-load-conditional get-stats
+```
