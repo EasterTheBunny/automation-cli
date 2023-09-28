@@ -45,6 +45,12 @@ automation-cli config setup --environment="some.environment"
 ## Contract Management
 Generally you can connect to existing contracts or deploy new ones.
 
+**Available Contracts**
+- registrar
+- registry
+- verifiable-load-log-trigger
+- verifiable-load-conditional
+
 ### Connect to Existing
 If you know the address of an existing contract and just want to connect and store that contract for future use in the
 CLI tool, use the following command. Remember to define your environment or it will select the default (default).
