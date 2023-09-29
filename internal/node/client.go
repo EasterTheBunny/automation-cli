@@ -149,7 +149,10 @@ func getP2PKeyID(client HTTPClient) (string, error) {
 type OCR2KeyBundlePresenter struct {
 	ID         string `json:"id"`
 	Attributes struct {
-		ChainType string `json:"chainType"`
+		ChainType         string `json:"chainType"`
+		OnchainPublicKey  string `json:"onchainPublicKey"`
+		OffChainPublicKey string `json:"offchainPublicKey"`
+		ConfigPublicKey   string `json:"configPublicKey"`
 	} `json:"attributes"`
 }
 

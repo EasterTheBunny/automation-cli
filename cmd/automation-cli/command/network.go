@@ -122,7 +122,7 @@ var networkAddCmd = &cobra.Command{
 					return err
 				}
 
-				conf.Nodes = append(conf.Nodes, fmt.Sprintf("%s-%s", conf.Groupname, nodeName))
+				conf.Nodes = append(conf.Nodes, nodeName)
 			}
 
 			viper.Set("nodes", conf.Nodes)

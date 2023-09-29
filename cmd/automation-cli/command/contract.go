@@ -8,6 +8,7 @@ import (
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 	"github.com/easterthebunny/automation-cli/internal/asset"
+	"github.com/easterthebunny/automation-cli/internal/node"
 )
 
 const (
@@ -278,6 +279,11 @@ var contractInteractCmd = &cobra.Command{
 
 		dConfig := config.GetDeployerConfig(conf)
 
+		path := GetConfigPathFromContext(cmd.Context())
+		if path == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
 		keyConf := GetKeyConfigFromContext(cmd.Context())
 		if keyConf == nil {
 			return fmt.Errorf("missing private key config")
@@ -297,28 +303,56 @@ var contractInteractCmd = &cobra.Command{
 		}
 
 		switch args[0] {
-		/*
-			case Registry:
-				if args[1] != "set-config" {
-					return fmt.Errorf("invalid action")
+		case Registry:
+			if args[1] != "set-config" {
+				return fmt.Errorf("invalid action")
+			}
+
+			interactable := asset.NewRegistryV21Deployable(&asset.RegistryV21Config{
+				Mode:            config.GetRegistryMode(conf),
+				LinkTokenAddr:   conf.LinkContract,
+				LinkETHFeedAddr: conf.LinkETHFeed,
+				FastGasFeedAddr: conf.FastGasFeed,
+			})
+
+			if _, err := interactable.Connect(cmd.Context(), conf.ServiceContract.RegistryAddress, deployer); err != nil {
+				return err
+			}
+
+			nodeConfs := make([]asset.OCR2NodeConfig, len(conf.Nodes))
+
+			for idx, nodeName := range conf.Nodes {
+				nodeConfigPath := fmt.Sprintf("%s/%s", *path, nodeName)
+
+				nodeConf, _, err := config.GetNodeConfig(nodeConfigPath)
+				if err != nil {
+					return err
 				}
 
-				interactable := asset.NewRegistryV21Deployable(&asset.RegistryV21Config{
-					Mode:            config.GetRegistryMode(conf),
-					LinkTokenAddr:   conf.LinkContract,
-					LinkETHFeedAddr: conf.LinkETHFeed,
-					FastGasFeedAddr: conf.FastGasFeed,
-				})
-
-				nodeConfs := make([]asset.OCR2NodeConfig, len(conf.Nodes))
-
-				// TODO: get all node configs
-				for idx, node := range conf.Nodes {
-					nodeConfs[idx] = asset.OCR2NodeConfig{}
+				participantConf, err := node.GetParticipantInfo(cmd.Context(), nodeConf.ManagementURL)
+				if err != nil {
+					return fmt.Errorf("failed to get participant info from %s: %s", nodeName, err.Error())
 				}
 
-				interactable.SetOffchainConfig(cmd.Context(), deployer, nodeConfs, asset.OCR3NetworkConfig{}, asset.AutomationV21OffchainConfig{})
-		*/
+				nodeConfs[idx] = asset.OCR2NodeConfig{
+					Address:           nodeConf.Address,
+					OffChainPublicKey: participantConf.OffChainPublicKey,
+					ConfigPublicKey:   participantConf.ConfigPublicKey,
+					OnchainPublicKey:  participantConf.OnchainPublicKey,
+					P2PKeyID:          participantConf.P2PKeyID,
+				}
+			}
+
+			if err := interactable.SetOffchainConfig(
+				cmd.Context(),
+				deployer,
+				nodeConfs,
+				config.GetAssetOCRConfig(conf),
+				config.GetOffchainConfig(conf),
+				config.GetOnchainConfig(conf),
+			); err != nil {
+				return err
+			}
 		case VerifiableLoadLogTrigger:
 			if args[1] != "get-stats" {
 				return fmt.Errorf("invalid action")

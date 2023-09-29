@@ -15,7 +15,7 @@ import (
 	ocr2config "github.com/smartcontractkit/libocr/offchainreporting2plus/confighelper"
 	"github.com/smartcontractkit/libocr/offchainreporting2plus/ocr3confighelper"
 	ocr2types "github.com/smartcontractkit/libocr/offchainreporting2plus/types"
-	offchain20config "github.com/smartcontractkit/ocr2keepers/pkg/v2/config"
+	offchain21config "github.com/smartcontractkit/ocr2keepers/pkg/v3/config"
 
 	forwarder "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/automation_forwarder_logic"
 	iregistry "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/i_keeper_registry_master_wrapper_2_1"
@@ -45,38 +45,47 @@ type OCR2NodeConfig struct {
 }
 
 type AutomationV21OffchainConfig struct {
-	MercuryLookup          bool     `json:"mercuryLookup"`
-	PaymentPremiumPPB      uint32   `json:"paymentPremiumPPB"`
-	FlatFeeMicroLink       uint32   `json:"flatFeeMicroLink"`
-	CheckGasLimit          uint32   `json:"checkGasLimit"`
-	StalenessSeconds       *big.Int `json:"stalenessSeconds"`
-	GasCeilingMultiplier   uint16   `json:"gasCeilingMultiplier"`
-	MinUpkeepSpend         *big.Int `json:"minUpkeepSpend"`
-	MaxPerformGas          uint32   `json:"maxPerformGas"`
-	MaxCheckDataSize       uint32   `json:"maxCheckDataSize"`
-	MaxPerformDataSize     uint32   `json:"maxPerformDataSize"`
-	MaxRevertDataSize      uint32   `json:"maxRevertDataSize"`
-	FallbackGasPrice       *big.Int `json:"fallbackGasPrice"`
-	FallbackLinkPrice      *big.Int `json:"fallbackLinkPrice"`
-	Transcoder             string   `json:"transcoderAddress"`
-	Registrar              string   `json:"registrarAddress"`
-	UpkeepPrivilegeManager string   `json:"upkeepPrivilegeManagerAddress"`
+	PerformLockoutWindow int64
+	MinConfirmations     int
+	TargetProbability    string
+	TargetInRounds       int
+	GasLimitPerReport    uint32
+	GasOverheadPerUpkeep uint32
+	MaxUpkeepBatchSize   int
+}
+
+type AutomationV21OnchainConfig struct {
+	PaymentPremiumPPB      uint32
+	FlatFeeMicroLink       uint32
+	CheckGasLimit          uint32
+	StalenessSeconds       *big.Int
+	GasCeilingMultiplier   uint16
+	MinUpkeepSpend         *big.Int
+	MaxPerformGas          uint32
+	MaxCheckDataSize       uint32
+	MaxPerformDataSize     uint32
+	MaxRevertDataSize      uint32
+	FallbackGasPrice       *big.Int
+	FallbackLinkPrice      *big.Int
+	Transcoder             string
+	Registrar              string
+	UpkeepPrivilegeManager string
 }
 
 type OCR3NetworkConfig struct {
-	DeltaProgress                           time.Duration `json:"deltaProgress,omitempty"`
-	DeltaResend                             time.Duration `json:"deltaResend,omitempty"`
-	DeltaInitial                            time.Duration `json:"deltaInitial,omitempty"`
-	DeltaRound                              time.Duration `json:"deltaRound,omitempty"`
-	DeltaGrace                              time.Duration `json:"deltaGrace,omitempty"`
-	DeltaCertifiedCommitRequest             time.Duration `json:"deltaCertifiedCommitRequest,omitempty"`
-	DeltaStage                              time.Duration `json:"deltaStage,omitempty"`
-	MaxRounds                               uint64        `json:"maxRounds,omitempty"`
-	MaxDurationQuery                        time.Duration `json:"maxDurationQuery,omitempty"`
-	MaxDurationObservation                  time.Duration `json:"maxDurationObservation,omitempty"`
-	MaxDurationShouldAcceptFinalizedReport  time.Duration `json:"maxDurationShouldAcceptFinalizedReport,omitempty"`
-	MaxDurationShouldTransmitAcceptedReport time.Duration `json:"maxDurationShouldTransmitAcceptedReport,omitempty"`
-	MaxFaultyNodes                          int           `json:"maxFaultyNodes,omitempty"`
+	DeltaProgress                           time.Duration
+	DeltaResend                             time.Duration
+	DeltaInitial                            time.Duration
+	DeltaRound                              time.Duration
+	DeltaGrace                              time.Duration
+	DeltaCertifiedCommitRequest             time.Duration
+	DeltaStage                              time.Duration
+	MaxRounds                               uint64
+	MaxDurationQuery                        time.Duration
+	MaxDurationObservation                  time.Duration
+	MaxDurationShouldAcceptFinalizedReport  time.Duration
+	MaxDurationShouldTransmitAcceptedReport time.Duration
+	MaxFaultyNodes                          int
 }
 
 type RegistryV21Deployable struct {
@@ -126,6 +135,7 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 	nodeConfs []OCR2NodeConfig,
 	ocrConf OCR3NetworkConfig,
 	offchain AutomationV21OffchainConfig,
+	onchain AutomationV21OnchainConfig,
 ) error {
 	opts, err := deployer.BuildTxOpts(ctx)
 	if err != nil {
@@ -178,16 +188,18 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 		S[idx] = 1
 	}
 
-	offC, err := json.Marshal(offchain20config.OffchainConfig{
-		PerformLockoutWindow: 100 * 3 * 1000, // ~100 block lockout (on mumbai)
-		MinConfirmations:     1,
-		MercuryLookup:        offchain.MercuryLookup,
+	offC, err := json.Marshal(offchain21config.OffchainConfig{
+		PerformLockoutWindow: offchain.PerformLockoutWindow, // 100 * 3 * 1000, // ~100 block lockout (on mumbai)
+		MinConfirmations:     offchain.MinConfirmations,
+		TargetProbability:    offchain.TargetProbability,
+		TargetInRounds:       offchain.TargetInRounds,
+		GasLimitPerReport:    offchain.GasLimitPerReport,
+		GasOverheadPerUpkeep: offchain.GasOverheadPerUpkeep,
+		MaxUpkeepBatchSize:   offchain.MaxUpkeepBatchSize,
 	})
 	if err != nil {
 		return err
 	}
-
-	ocrConf = overrideDefaultsOCR3NetworkConfig(ocrConf)
 
 	signerOnchainPublicKeys, transmitterAccounts, f, _, offchainConfigVersion, offchainConfig, err := ocr3confighelper.ContractSetConfigArgsForTests(
 		ocrConf.DeltaProgress,
@@ -233,21 +245,21 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 	}
 
 	onchainConfig := iregistry.KeeperRegistryBase21OnchainConfig{
-		PaymentPremiumPPB:      offchain.PaymentPremiumPPB,
-		FlatFeeMicroLink:       offchain.FlatFeeMicroLink,
-		CheckGasLimit:          offchain.CheckGasLimit,
-		StalenessSeconds:       offchain.StalenessSeconds,
-		GasCeilingMultiplier:   offchain.GasCeilingMultiplier,
-		MinUpkeepSpend:         offchain.MinUpkeepSpend,
-		MaxPerformGas:          offchain.MaxPerformGas,
-		MaxCheckDataSize:       offchain.MaxCheckDataSize,
-		MaxPerformDataSize:     offchain.MaxPerformDataSize,
-		MaxRevertDataSize:      offchain.MaxRevertDataSize,
-		FallbackGasPrice:       offchain.FallbackGasPrice,
-		FallbackLinkPrice:      offchain.FallbackLinkPrice,
-		Transcoder:             common.HexToAddress(offchain.Transcoder),
-		Registrars:             []common.Address{common.HexToAddress(offchain.Registrar)},
-		UpkeepPrivilegeManager: common.HexToAddress(offchain.UpkeepPrivilegeManager),
+		PaymentPremiumPPB:      onchain.PaymentPremiumPPB,
+		FlatFeeMicroLink:       onchain.FlatFeeMicroLink,
+		CheckGasLimit:          onchain.CheckGasLimit,
+		StalenessSeconds:       onchain.StalenessSeconds,
+		GasCeilingMultiplier:   onchain.GasCeilingMultiplier,
+		MinUpkeepSpend:         onchain.MinUpkeepSpend,
+		MaxPerformGas:          onchain.MaxPerformGas,
+		MaxCheckDataSize:       onchain.MaxCheckDataSize,
+		MaxPerformDataSize:     onchain.MaxPerformDataSize,
+		MaxRevertDataSize:      onchain.MaxRevertDataSize,
+		FallbackGasPrice:       onchain.FallbackGasPrice,
+		FallbackLinkPrice:      onchain.FallbackLinkPrice,
+		Transcoder:             common.HexToAddress(onchain.Transcoder),
+		Registrars:             []common.Address{common.HexToAddress(onchain.Registrar)},
+		UpkeepPrivilegeManager: common.HexToAddress(onchain.UpkeepPrivilegeManager),
 	}
 
 	trx, err := d.registry.SetConfigTypeSafe(opts, signers, transmitters, f, onchainConfig, offchainConfigVersion, offchainConfig)
@@ -255,7 +267,7 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 		return err
 	}
 
-	if err := deployer.waitDeployment(ctx, trx); err != nil {
+	if err := deployer.wait(ctx, trx); err != nil {
 		return err
 	}
 
@@ -413,76 +425,4 @@ func (d *RegistryV21Deployable) deployRegistry(
 	// fmt.Printf("registry deployed to: %s\n", util.ExplorerLink(deployer.Config.ChainID, trx.Hash()))
 
 	return registryAddr, nil
-}
-
-func overrideDefaultsOCR3NetworkConfig(conf OCR3NetworkConfig) OCR3NetworkConfig {
-	defaultConf := OCR3NetworkConfig{
-		DeltaProgress:                           5 * time.Second,
-		DeltaResend:                             10 * time.Second,
-		DeltaInitial:                            400 * time.Millisecond,
-		DeltaRound:                              2500 * time.Millisecond,
-		DeltaGrace:                              40 * time.Millisecond,
-		DeltaCertifiedCommitRequest:             300 * time.Millisecond,
-		DeltaStage:                              30 * time.Second,
-		MaxRounds:                               50,
-		MaxDurationQuery:                        20 * time.Millisecond,
-		MaxDurationObservation:                  1600 * time.Millisecond,
-		MaxDurationShouldAcceptFinalizedReport:  20 * time.Millisecond,
-		MaxDurationShouldTransmitAcceptedReport: 20 * time.Millisecond,
-		MaxFaultyNodes:                          1,
-	}
-
-	if conf.DeltaProgress != 0 {
-		defaultConf.DeltaProgress = conf.DeltaProgress
-	}
-
-	if conf.DeltaResend != 0 {
-		defaultConf.DeltaResend = conf.DeltaResend
-	}
-
-	if conf.DeltaInitial != 0 {
-		defaultConf.DeltaInitial = conf.DeltaInitial
-	}
-
-	if conf.DeltaRound != 0 {
-		defaultConf.DeltaRound = conf.DeltaRound
-	}
-
-	if conf.DeltaGrace != 0 {
-		defaultConf.DeltaGrace = conf.DeltaGrace
-	}
-
-	if conf.DeltaCertifiedCommitRequest != 0 {
-		defaultConf.DeltaCertifiedCommitRequest = conf.DeltaCertifiedCommitRequest
-	}
-
-	if conf.DeltaStage != 0 {
-		defaultConf.DeltaStage = conf.DeltaStage
-	}
-
-	if conf.MaxRounds != 0 {
-		defaultConf.MaxRounds = conf.MaxRounds
-	}
-
-	if conf.MaxDurationQuery != 0 {
-		defaultConf.MaxDurationQuery = conf.MaxDurationQuery
-	}
-
-	if conf.MaxDurationObservation != 0 {
-		defaultConf.MaxDurationObservation = conf.MaxDurationObservation
-	}
-
-	if conf.MaxDurationShouldAcceptFinalizedReport != 0 {
-		defaultConf.MaxDurationShouldAcceptFinalizedReport = conf.MaxDurationShouldAcceptFinalizedReport
-	}
-
-	if conf.MaxDurationShouldTransmitAcceptedReport != 0 {
-		defaultConf.MaxDurationShouldTransmitAcceptedReport = conf.MaxDurationShouldTransmitAcceptedReport
-	}
-
-	if conf.MaxFaultyNodes != 0 {
-		defaultConf.MaxFaultyNodes = conf.MaxFaultyNodes
-	}
-
-	return defaultConf
 }

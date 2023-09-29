@@ -5,6 +5,13 @@ import (
 	"io"
 )
 
+type OCR2NodeConfig struct {
+	OffChainPublicKey string
+	ConfigPublicKey   string
+	OnchainPublicKey  string
+	P2PKeyID          string
+}
+
 func CreatParticipantNode(
 	ctx context.Context,
 	conf NodeConfig,
@@ -63,4 +70,31 @@ func CreatParticipantNode(
 	}
 
 	return clNode, nil
+}
+
+func GetParticipantInfo(
+	ctx context.Context,
+	url string,
+) (*OCR2NodeConfig, error) {
+	client, err := authenticate(ctx, url, DefaultChainlinkNodeLogin, DefaultChainlinkNodePassword)
+	if err != nil {
+		return nil, err
+	}
+
+	ocr2Conf, err := getNodeOCR2Config(client)
+	if err != nil {
+		return nil, err
+	}
+
+	keyID, err := getP2PKeyID(client)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OCR2NodeConfig{
+		OffChainPublicKey: ocr2Conf.Attributes.OffChainPublicKey,
+		ConfigPublicKey:   ocr2Conf.Attributes.ConfigPublicKey,
+		OnchainPublicKey:  ocr2Conf.Attributes.OnchainPublicKey,
+		P2PKeyID:          keyID,
+	}, nil
 }
