@@ -10,7 +10,7 @@ const (
 const (
 	nodeTOML = `[Log]
 JSONConsole = true
-Level = 'debug'
+Level = '%s'
 [WebServer]
 AllowOrigins = '*'
 SecureCookies = false
@@ -69,6 +69,7 @@ type NodeConfig struct {
 	ChainID     int64
 	NodeWSSURL  string
 	NodeHttpURL string
+	LogLevel    string
 
 	MercuryLegacyURL string
 	MercuryURL       string
@@ -77,7 +78,7 @@ type NodeConfig struct {
 }
 
 func NodeTOML(conf NodeConfig) string {
-	return fmt.Sprintf(nodeTOML, conf.ChainID, conf.NodeWSSURL, conf.NodeHttpURL)
+	return fmt.Sprintf(nodeTOML, conf.LogLevel, conf.ChainID, conf.NodeWSSURL, conf.NodeHttpURL)
 }
 
 func SecretTOML(conf NodeConfig) string {

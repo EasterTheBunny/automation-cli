@@ -8,15 +8,42 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/montanaflynn/stats"
 
-	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_log_trigger_upkeep_wrapper"
 	verifiableLogTrigger "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_log_trigger_upkeep_wrapper"
-	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_upkeep_wrapper"
 	verifiableConditional "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/verifiable_load_upkeep_wrapper"
+)
+
+var (
+	ErrContractRead = fmt.Errorf("contract read error")
+	//nolint:gochecknoglobals
+	headerRowOne = table.Row{
+		"ID", "Total Performs", "Block Delays", "Block Delays", "Block Delays",
+		"Block Delays", "Block Delays", "Block Delays", "Block Delays"}
+	//nolint:gochecknoglobals
+	headerRowTwo = table.Row{
+		"", "", "50th", "90th", "95th", "99th", "Max", "Total", "Average"}
+)
+
+const (
+	P50 float64 = 50
+	P90 float64 = 90
+	P95 float64 = 95
+	P99 float64 = 99
+	// workerNum is the total number of workers calculating upkeeps' delay summary
+	workerNum = 5
+	// retryDelay is the time the go routine will wait before calling the same contract function
+	retryDelay = 1 * time.Second
+	// retryNum defines how many times the go routine will attempt the same contract call
+	retryNum = 3
+	// maxUpkeepNum defines the size of channels. Increase if there are lots of upkeeps.
+	maxUpkeepNum       = 100
+	upkeepIDLength int = 8
 )
 
 type VerifiableLoadConfig struct {
@@ -52,7 +79,7 @@ func (d *VerifiableLoadLogTriggerDeployable) Connect(
 func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 	ctx context.Context,
 	deployer *Deployer,
-	config VerifyContractConfig,
+	_ VerifyContractConfig,
 ) (common.Address, error) {
 	var contractAddr common.Address
 
@@ -88,10 +115,15 @@ func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 	return contractAddr, nil
 }
 
-func (d *VerifiableLoadLogTriggerDeployable) ReadStats(ctx context.Context, deployer *Deployer, conf VerifiableLoadInteractionConfig) error {
+//nolint:funlen
+func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
 	addr := common.HexToAddress(conf.ContractAddr)
 
-	contract, err := verifiable_load_log_trigger_upkeep_wrapper.NewVerifiableLoadLogTriggerUpkeep(addr, deployer.Client)
+	contract, err := verifiableLogTrigger.NewVerifiableLoadLogTriggerUpkeep(addr, deployer.Client)
 	if err != nil {
 		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
 	}
@@ -99,8 +131,14 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(ctx context.Context, depl
 	// get all the stats from this block
 	blockNum, err := deployer.Client.BlockNumber(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get block number: %s", err.Error())
+		return fmt.Errorf("%w: failed to get block number: %s", ErrContractRead, err.Error())
 	}
+
+	writer := table.NewWriter()
+
+	writer.SetTitle(fmt.Sprintf("Upkeep Results --> (All STATS BELOW ARE CALCULATED AT BLOCK %d)", blockNum))
+	writer.AppendHeader(headerRowOne, table.RowConfig{AutoMerge: true})
+	writer.AppendHeader(headerRowTwo)
 
 	opts := &bind.CallOpts{
 		From:        deployer.Address,
@@ -111,20 +149,24 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(ctx context.Context, depl
 	// get all active upkeep IDs on this verifiable load contract
 	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
 	if err != nil {
-		return fmt.Errorf("failed to get active upkeep IDs from %s: %s", addr, err.Error())
+		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
 	}
 
-	us := &upkeepStats{BlockNumber: blockNum}
-
+	uStats := &upkeepStats{BlockNumber: blockNum}
 	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
 	idChan := make(chan *big.Int, maxUpkeepNum)
 
-	var wg sync.WaitGroup
+	var group sync.WaitGroup
 
 	// create a number of workers to process the upkeep ids in batch
 	for i := 0; i < workerNum; i++ {
-		wg.Add(1)
-		go getUpkeepInfo(idChan, resultsChan, contract, opts, &wg)
+		group.Add(1)
+
+		go func() {
+			defer group.Done()
+
+			getUpkeepInfo(writer, idChan, resultsChan, contract, opts)
+		}()
 	}
 
 	for _, id := range upkeepIds {
@@ -132,27 +174,45 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(ctx context.Context, depl
 	}
 
 	close(idChan)
-	wg.Wait()
+	group.Wait()
 
 	close(resultsChan)
 
 	for info := range resultsChan {
-		us.AllInfos = append(us.AllInfos, info)
-		us.TotalPerforms += info.TotalPerforms
-		us.TotalDelayBlock += info.TotalDelayBlock
-		us.SortedAllDelays = append(us.SortedAllDelays, info.SortedAllDelays...)
+		uStats.AllInfos = append(uStats.AllInfos, info)
+		uStats.TotalPerforms += info.TotalPerforms
+		uStats.TotalDelayBlock += info.TotalDelayBlock
+		uStats.SortedAllDelays = append(uStats.SortedAllDelays, info.SortedAllDelays...)
 	}
 
-	sort.Float64s(us.SortedAllDelays)
+	sort.Float64s(uStats.SortedAllDelays)
 
-	log.Println("\n\n================================== ALL UPKEEPS SUMMARY =======================================================")
-	p50, _ := stats.Percentile(us.SortedAllDelays, 50)
-	p90, _ := stats.Percentile(us.SortedAllDelays, 90)
-	p95, _ := stats.Percentile(us.SortedAllDelays, 95)
-	p99, _ := stats.Percentile(us.SortedAllDelays, 99)
-	maxDelay := us.SortedAllDelays[len(us.SortedAllDelays)-1]
-	log.Printf("For total %d upkeeps: total performs: %d, p50: %f, p90: %f, p95: %f, p99: %f, max delay: %f, total delay blocks: %f, average perform delay: %f\n", len(upkeepIds), us.TotalPerforms, p50, p90, p95, p99, maxDelay, us.TotalDelayBlock, us.TotalDelayBlock/float64(us.TotalPerforms))
-	log.Printf("All STATS ABOVE ARE CALCULATED AT BLOCK %d", blockNum)
+	percentiles, err := getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
+	if err != nil {
+		return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
+	}
+
+	maxDelay := uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+
+	writer.AppendFooter(table.Row{
+		"Total",
+		uStats.TotalPerforms,
+		fmt.Sprintf("%f", percentiles[0]),
+		fmt.Sprintf("%f", percentiles[1]),
+		fmt.Sprintf("%f", percentiles[2]),
+		fmt.Sprintf("%f", percentiles[3]),
+		fmt.Sprintf("%f", maxDelay),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock/float64(uStats.TotalPerforms)),
+	})
+
+	writer.SetAutoIndex(true)
+	writer.SetStyle(table.StyleLight)
+
+	writer.Style().Options.SeparateRows = true
+
+	//nolint:forbidigo
+	fmt.Println(writer.Render())
 
 	return nil
 }
@@ -229,16 +289,120 @@ func (d *VerifiableLoadConditionalDeployable) Deploy(
 	return contractAddr, nil
 }
 
-const (
-	// workerNum is the total number of workers calculating upkeeps' delay summary
-	workerNum = 5
-	// retryDelay is the time the go routine will wait before calling the same contract function
-	retryDelay = 1 * time.Second
-	// retryNum defines how many times the go routine will attempt the same contract call
-	retryNum = 3
-	// maxUpkeepNum defines the size of channels. Increase if there are lots of upkeeps.
-	maxUpkeepNum = 100
-)
+//nolint:funlen
+func (d *VerifiableLoadConditionalDeployable) ReadStats(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiableConditional.NewVerifiableLoadUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	// get all the stats from this block
+	blockNum, err := deployer.Client.BlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: failed to get block number: %s", ErrContractRead, err.Error())
+	}
+
+	opts := &bind.CallOpts{
+		From:        deployer.Address,
+		Context:     ctx,
+		BlockNumber: big.NewInt(int64(blockNum)),
+	}
+
+	// get all active upkeep IDs on this verifiable load contract
+	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
+	if err != nil {
+		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
+	}
+
+	uStats := &upkeepStats{BlockNumber: blockNum}
+	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
+	idChan := make(chan *big.Int, maxUpkeepNum)
+	writer := table.NewWriter()
+
+	writer.SetTitle(fmt.Sprintf("Upkeep Results --> (All STATS BELOW ARE CALCULATED AT BLOCK %d)", blockNum))
+	writer.AppendHeader(headerRowOne, table.RowConfig{AutoMerge: true})
+	writer.AppendHeader(headerRowTwo)
+
+	var group sync.WaitGroup
+
+	// create a number of workers to process the upkeep ids in batch
+	for i := 0; i < workerNum; i++ {
+		group.Add(1)
+
+		go func() {
+			defer group.Done()
+
+			getUpkeepInfo(writer, idChan, resultsChan, contract, opts)
+		}()
+	}
+
+	for _, id := range upkeepIds {
+		idChan <- id
+	}
+
+	close(idChan)
+	group.Wait()
+	close(resultsChan)
+
+	for info := range resultsChan {
+		uStats.AllInfos = append(uStats.AllInfos, info)
+		uStats.TotalPerforms += info.TotalPerforms
+		uStats.TotalDelayBlock += info.TotalDelayBlock
+		uStats.SortedAllDelays = append(uStats.SortedAllDelays, info.SortedAllDelays...)
+	}
+
+	sort.Float64s(uStats.SortedAllDelays)
+
+	percentiles, err := getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
+	if err != nil {
+		return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
+	}
+
+	maxDelay := uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+
+	writer.AppendFooter(table.Row{
+		"Total",
+		uStats.TotalPerforms,
+		fmt.Sprintf("%f", percentiles[0]),
+		fmt.Sprintf("%f", percentiles[1]),
+		fmt.Sprintf("%f", percentiles[2]),
+		fmt.Sprintf("%f", percentiles[3]),
+		fmt.Sprintf("%f", maxDelay),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock/float64(uStats.TotalPerforms)),
+	})
+
+	writer.SetAutoIndex(true)
+	writer.SetStyle(table.StyleLight)
+
+	writer.Style().Options.SeparateRows = true
+
+	//nolint:forbidigo
+	fmt.Println(writer.Render())
+
+	return nil
+}
+
+func (d *VerifiableLoadConditionalDeployable) connectToInterface(
+	_ context.Context,
+	addr common.Address,
+	deployer *Deployer,
+) (common.Address, error) {
+	contract, err := verifiableConditional.NewVerifiableLoadUpkeep(addr, deployer.Client)
+	if err != nil {
+		return addr, fmt.Errorf("%w: failed to connect to contract at (%s): %s", ErrContractConnection, addr, err.Error())
+	}
+
+	d.contract = contract
+
+	return addr, nil
+}
 
 type upkeepInfo struct {
 	mu              sync.Mutex
@@ -264,130 +428,61 @@ type upkeepStats struct {
 	SortedAllDelays []float64
 }
 
-func (d *VerifiableLoadConditionalDeployable) ReadStats(ctx context.Context, deployer *Deployer, conf VerifiableLoadInteractionConfig) error {
-	addr := common.HexToAddress(conf.ContractAddr)
-
-	contract, err := verifiable_load_upkeep_wrapper.NewVerifiableLoadUpkeep(addr, deployer.Client)
-	if err != nil {
-		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
-	}
-
-	// get all the stats from this block
-	blockNum, err := deployer.Client.BlockNumber(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get block number: %s", err.Error())
-	}
-
-	opts := &bind.CallOpts{
-		From:        deployer.Address,
-		Context:     ctx,
-		BlockNumber: big.NewInt(int64(blockNum)),
-	}
-
-	// get all active upkeep IDs on this verifiable load contract
-	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
-	if err != nil {
-		return fmt.Errorf("failed to get active upkeep IDs from %s: %s", addr, err.Error())
-	}
-
-	us := &upkeepStats{BlockNumber: blockNum}
-
-	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
-	idChan := make(chan *big.Int, maxUpkeepNum)
-
-	var wg sync.WaitGroup
-
-	// create a number of workers to process the upkeep ids in batch
-	for i := 0; i < workerNum; i++ {
-		wg.Add(1)
-		go getUpkeepInfo(idChan, resultsChan, contract, opts, &wg)
-	}
-
-	for _, id := range upkeepIds {
-		idChan <- id
-	}
-
-	close(idChan)
-	wg.Wait()
-
-	close(resultsChan)
-
-	for info := range resultsChan {
-		us.AllInfos = append(us.AllInfos, info)
-		us.TotalPerforms += info.TotalPerforms
-		us.TotalDelayBlock += info.TotalDelayBlock
-		us.SortedAllDelays = append(us.SortedAllDelays, info.SortedAllDelays...)
-	}
-
-	sort.Float64s(us.SortedAllDelays)
-
-	log.Println("\n\n================================== ALL UPKEEPS SUMMARY =======================================================")
-	p50, _ := stats.Percentile(us.SortedAllDelays, 50)
-	p90, _ := stats.Percentile(us.SortedAllDelays, 90)
-	p95, _ := stats.Percentile(us.SortedAllDelays, 95)
-	p99, _ := stats.Percentile(us.SortedAllDelays, 99)
-	maxDelay := us.SortedAllDelays[len(us.SortedAllDelays)-1]
-	log.Printf("For total %d upkeeps: total performs: %d, p50: %f, p90: %f, p95: %f, p99: %f, max delay: %f, total delay blocks: %f, average perform delay: %f\n", len(upkeepIds), us.TotalPerforms, p50, p90, p95, p99, maxDelay, us.TotalDelayBlock, us.TotalDelayBlock/float64(us.TotalPerforms))
-	log.Printf("All STATS ABOVE ARE CALCULATED AT BLOCK %d", blockNum)
-
-	return nil
-}
-
-func (d *VerifiableLoadConditionalDeployable) connectToInterface(
-	_ context.Context,
-	addr common.Address,
-	deployer *Deployer,
-) (common.Address, error) {
-	contract, err := verifiableConditional.NewVerifiableLoadUpkeep(addr, deployer.Client)
-	if err != nil {
-		return addr, fmt.Errorf("%w: failed to connect to contract at (%s): %s", ErrContractConnection, addr, err.Error())
-	}
-
-	d.contract = contract
-
-	return addr, nil
-}
-
 type verifiableLoadContract interface {
 	Counters(*bind.CallOpts, *big.Int) (*big.Int, error)
 	Buckets(*bind.CallOpts, *big.Int) (uint16, error)
 	GetBucketedDelays(*bind.CallOpts, *big.Int, uint16) ([]*big.Int, error)
 }
 
-func getUpkeepInfo(idChan chan *big.Int, resultsChan chan *upkeepInfo, contract verifiableLoadContract, opts *bind.CallOpts, wg *sync.WaitGroup) {
-	defer wg.Done()
-
-	for id := range idChan {
+//nolint:funlen
+func getUpkeepInfo(
+	writer table.Writer,
+	idChan chan *big.Int,
+	resultsChan chan *upkeepInfo,
+	contract verifiableLoadContract,
+	opts *bind.CallOpts,
+) {
+	for upkeepID := range idChan {
 		// fetch how many times this upkeep has been executed
-		c, err := contract.Counters(opts, id)
+		counter, err := contract.Counters(opts, upkeepID)
 		if err != nil {
-			log.Fatalf("failed to get counter for %s: %v", id.String(), err)
+			log.Fatalf("failed to get counter for %s: %v", upkeepID.String(), err)
 		}
 
 		// get all the buckets of an upkeep. 100 performs is a bucket.
-		b, err := contract.Buckets(opts, id)
+		bucket, err := contract.Buckets(opts, upkeepID)
 		if err != nil {
-			log.Fatalf("failed to get current bucket count for %s: %v", id.String(), err)
+			log.Fatalf("failed to get current bucket count for %s: %v", upkeepID.String(), err)
 		}
 
 		info := &upkeepInfo{
-			ID:            id,
-			Bucket:        b,
-			TotalPerforms: c.Uint64(),
+			ID:            upkeepID,
+			Bucket:        bucket,
+			TotalPerforms: counter.Uint64(),
 			DelayBuckets:  map[uint16][]float64{},
 		}
 
-		var delays []float64
-		var wg1 sync.WaitGroup
-		for i := uint16(0); i <= b; i++ {
-			wg1.Add(1)
-			go getBucketData(contract, opts, id, i, &wg1, info)
-		}
-		wg1.Wait()
+		var (
+			delays []float64
+			group  sync.WaitGroup
+		)
 
-		for i := uint16(0); i <= b; i++ {
+		for idx := uint16(0); idx <= bucket; idx++ {
+			group.Add(1)
+
+			go func(idx uint16) {
+				defer group.Done()
+
+				getBucketData(contract, opts, upkeepID, idx, info)
+			}(idx)
+		}
+
+		group.Wait()
+
+		for i := uint16(0); i <= bucket; i++ {
 			bucketDelays := info.DelayBuckets[i]
 			delays = append(delays, bucketDelays...)
+
 			for _, d := range bucketDelays {
 				info.TotalDelayBlock += d
 			}
@@ -396,36 +491,87 @@ func getUpkeepInfo(idChan chan *big.Int, resultsChan chan *upkeepInfo, contract 
 		info.SortedAllDelays = delays
 		info.TotalPerforms = uint64(len(info.SortedAllDelays))
 
-		p50, _ := stats.Percentile(info.SortedAllDelays, 50)
-		p90, _ := stats.Percentile(info.SortedAllDelays, 90)
-		p95, _ := stats.Percentile(info.SortedAllDelays, 95)
-		p99, _ := stats.Percentile(info.SortedAllDelays, 99)
+		percentiles, err := getPercentiles(info.SortedAllDelays, P50, P90, P95, P99)
+		if err != nil {
+			log.Println(err)
+		}
+
 		maxDelay := info.SortedAllDelays[len(info.SortedAllDelays)-1]
 
-		log.Printf("upkeep ID %s has %d performs in total. p50: %f, p90: %f, p95: %f, p99: %f, max delay: %f, total delay blocks: %d, average perform delay: %f\n", id, info.TotalPerforms, p50, p90, p95, p99, maxDelay, uint64(info.TotalDelayBlock), info.TotalDelayBlock/float64(info.TotalPerforms))
+		writer.AppendRow(table.Row{
+			shorten(upkeepID.String(), upkeepIDLength),
+			fmt.Sprintf("%d", info.TotalPerforms),
+			fmt.Sprintf("%f", percentiles[0]),
+			fmt.Sprintf("%f", percentiles[1]),
+			fmt.Sprintf("%f", percentiles[2]),
+			fmt.Sprintf("%f", percentiles[3]),
+			fmt.Sprintf("%f", maxDelay),
+			fmt.Sprintf("%d", uint64(info.TotalDelayBlock)),
+			fmt.Sprintf("%f", info.TotalDelayBlock/float64(info.TotalPerforms)),
+		}, table.RowConfig{AutoMerge: true})
+
 		resultsChan <- info
 	}
 }
 
-func getBucketData(contract verifiableLoadContract, opts *bind.CallOpts, id *big.Int, bucketNum uint16, wg *sync.WaitGroup, info *upkeepInfo) {
-	defer wg.Done()
+func getBucketData(
+	contract verifiableLoadContract,
+	opts *bind.CallOpts,
+	upkeepID *big.Int,
+	bucketNum uint16,
+	info *upkeepInfo,
+) {
+	var (
+		bucketDelays []*big.Int
+		err          error
+	)
 
-	var bucketDelays []*big.Int
-	var err error
 	for i := 0; i < retryNum; i++ {
-		bucketDelays, err = contract.GetBucketedDelays(opts, id, bucketNum)
+		bucketDelays, err = contract.GetBucketedDelays(opts, upkeepID, bucketNum)
 		if err != nil {
-			log.Printf("failed to get bucketed delays for upkeep id %s bucket %d: %v, retrying...", id.String(), bucketNum, err)
+			log.Printf(
+				"failed to get bucketed delays for upkeep id %s bucket %d: %v, retrying...",
+				upkeepID.String(),
+				bucketNum,
+				err,
+			)
+
 			time.Sleep(retryDelay)
 		} else {
 			break
 		}
 	}
 
-	var floatBucketDelays []float64
+	floatBucketDelays := make([]float64, 0, len(bucketDelays))
+
 	for _, d := range bucketDelays {
 		floatBucketDelays = append(floatBucketDelays, float64(d.Uint64()))
 	}
+
 	sort.Float64s(floatBucketDelays)
 	info.AddBucket(bucketNum, floatBucketDelays)
+}
+
+func shorten(full string, outLen int) string {
+	if utf8.RuneCountInString(full) < outLen {
+		return full
+	}
+
+	return string([]byte(full)[:outLen])
+}
+
+func getPercentiles(delays []float64, percentiles ...float64) ([]float64, error) {
+	calculated := make([]float64, len(percentiles))
+
+	for idx, percentile := range percentiles {
+		var err error
+
+		calculated[idx], err = stats.Percentile(delays, percentile)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return calculated, nil
 }

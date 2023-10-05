@@ -40,6 +40,7 @@ func GetDeployerConfig(config *Config) asset.DeployerConfig {
 		PrivateKey:   config.PrivateKey,
 		LinkContract: config.LinkContract,
 		Version:      config.ServiceContract.Version,
+		GasLimit:     80_000_000,
 	}
 }
 

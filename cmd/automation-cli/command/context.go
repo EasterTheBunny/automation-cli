@@ -2,6 +2,10 @@ package command
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 )
@@ -9,22 +13,58 @@ import (
 type contextKey int
 
 const (
-	ctxConfigPathKey contextKey = iota
+	ctxStateKey contextKey = iota
+	ctxConfigPathKey
 	ctxConfigKey
 	ctxKeyConfigKey
 )
 
-func AttachConfigPath(ctx context.Context, path string) context.Context {
-	return context.WithValue(ctx, ctxConfigPathKey, path)
+type StatePaths struct {
+	Base        string
+	Environment string
 }
 
-func GetConfigPathFromContext(ctx context.Context) *string {
-	val := ctx.Value(ctxConfigPathKey)
+func CreateStatePaths(base, environment string) (*StatePaths, error) {
+	// check if starts with ~/ and replace with home directory
+	if strings.HasPrefix(base, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
+
+		base = strings.Replace(base, "~", home, 1)
+	}
+
+	environment = fmt.Sprintf("%s/%s", base, environment)
+
+	if _, err := os.Stat(environment); os.IsNotExist(err) {
+		abs, err := filepath.Abs(environment)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := os.MkdirAll(abs, 0760); err != nil {
+			return nil, err
+		}
+	}
+
+	return &StatePaths{
+		Base:        base,
+		Environment: environment,
+	}, nil
+}
+
+func AttachPaths(ctx context.Context, paths StatePaths) context.Context {
+	return context.WithValue(ctx, ctxStateKey, paths)
+}
+
+func GetPathsFromContext(ctx context.Context) *StatePaths {
+	val := ctx.Value(ctxStateKey)
 	if val == nil {
 		return nil
 	}
 
-	path, ok := val.(string)
+	path, ok := val.(StatePaths)
 	if !ok {
 		return nil
 	}

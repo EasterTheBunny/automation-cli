@@ -62,14 +62,16 @@ func (d *RegistrarV21Deployable) Deploy(
 		return contractAddr, err
 	}
 
-	PrintVerifyContractCommand(
-		config,
-		contractAddr.String(),
-		d.cCfg.LinkTokenAddr,
-		d.cCfg.RegistryAddr,
-		minLink.String(),
-		"[]",
-	)
+	/*
+		PrintVerifyContractCommand(
+			config,
+			contractAddr.String(),
+			d.cCfg.LinkTokenAddr,
+			d.cCfg.RegistryAddr,
+			minLink.String(),
+			"[]",
+		)
+	*/
 
 	return contractAddr, nil
 }

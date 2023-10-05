@@ -125,7 +125,38 @@ func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) 
 	return auth, nil
 }
 
+func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error {
+	opts, err := d.BuildTxOpts(ctx)
+	if err != nil {
+		return err
+	}
+
+	addr := common.HexToAddress(toAddr)
+	trx := types.NewTx(&types.LegacyTx{
+		Nonce:    opts.Nonce.Uint64(),
+		To:       &addr,
+		Value:    new(big.Int).SetUint64(amount),
+		Gas:      opts.GasLimit,
+		GasPrice: opts.GasPrice,
+		Data:     nil,
+	})
+
+	signedTx, err := types.SignTx(trx, types.NewEIP155Signer(big.NewInt(d.Config.ChainID)), d.privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to sign tx: %w", err)
+	}
+
+	fmt.Println("attempting to send transaction: ", signedTx.Hash())
+	if err = d.Client.SendTransaction(ctx, signedTx); err != nil {
+		return fmt.Errorf("failed to send tx: %w", err)
+	}
+
+	return d.wait(ctx, signedTx)
+}
+
 func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
+	fmt.Println("waiting for transaction to be mined: ", trx.Hash())
+
 	receipt, err := bind.WaitMined(ctx, d.Client, trx)
 	if err != nil {
 		return fmt.Errorf("%w: failed to wait for transaction (%s): %s", ErrChainTransaction, trx.Hash(), err.Error())

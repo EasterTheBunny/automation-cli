@@ -269,8 +269,16 @@ var contractInteractCmd = &cobra.Command{
 	Use:       "interact [NAME] [ACTION]",
 	Short:     "Run pre-defined actions for contract",
 	Long:      `Interact with contracts and run pre-packaged actions. This is not inclusive of all commands possible to run`,
-	Args:      cobra.ExactArgs(2),
-	ValidArgs: []string{VerifiableLoadConditional, "get-stats"},
+	Args:      cobra.MinimumNArgs(1),
+	ValidArgs: validContractNames,
+}
+
+var contractInteractRegistryCmd = &cobra.Command{
+	Use:       "registry [ACTION]",
+	Short:     "Run pre-defined actions for contract",
+	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
+	Args:      cobra.ExactArgs(1),
+	ValidArgs: []string{"set-config"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conf := GetConfigFromContext(cmd.Context())
 		if conf == nil {
@@ -279,8 +287,8 @@ var contractInteractCmd = &cobra.Command{
 
 		dConfig := config.GetDeployerConfig(conf)
 
-		path := GetConfigPathFromContext(cmd.Context())
-		if path == nil {
+		paths := GetPathsFromContext(cmd.Context())
+		if paths == nil {
 			return fmt.Errorf("missing config path in context")
 		}
 
@@ -303,11 +311,7 @@ var contractInteractCmd = &cobra.Command{
 		}
 
 		switch args[0] {
-		case Registry:
-			if args[1] != "set-config" {
-				return fmt.Errorf("invalid action")
-			}
-
+		case "set-config":
 			interactable := asset.NewRegistryV21Deployable(&asset.RegistryV21Config{
 				Mode:            config.GetRegistryMode(conf),
 				LinkTokenAddr:   conf.LinkContract,
@@ -322,7 +326,7 @@ var contractInteractCmd = &cobra.Command{
 			nodeConfs := make([]asset.OCR2NodeConfig, len(conf.Nodes))
 
 			for idx, nodeName := range conf.Nodes {
-				nodeConfigPath := fmt.Sprintf("%s/%s", *path, nodeName)
+				nodeConfigPath := fmt.Sprintf("%s/%s", paths.Environment, nodeName)
 
 				nodeConf, _, err := config.GetNodeConfig(nodeConfigPath)
 				if err != nil {
@@ -353,11 +357,46 @@ var contractInteractCmd = &cobra.Command{
 			); err != nil {
 				return err
 			}
-		case VerifiableLoadLogTrigger:
-			if args[1] != "get-stats" {
-				return fmt.Errorf("invalid action")
-			}
+		}
 
+		return nil
+	},
+}
+
+var contractInteractVerifiableLogCmd = &cobra.Command{
+	Use:       "verifiable-load-lot-trigger [ACTION]",
+	Short:     "Run pre-defined actions for contract",
+	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
+	Args:      cobra.ExactArgs(1),
+	ValidArgs: []string{"get-stats"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		conf := GetConfigFromContext(cmd.Context())
+		if conf == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
+		dConfig := config.GetDeployerConfig(conf)
+
+		keyConf := GetKeyConfigFromContext(cmd.Context())
+		if keyConf == nil {
+			return fmt.Errorf("missing private key config")
+		}
+
+		for _, key := range keyConf.Keys {
+			if key.Alias == dConfig.PrivateKey {
+				dConfig.PrivateKey = key.Value
+
+				break
+			}
+		}
+
+		deployer, err := asset.NewDeployer(&dConfig)
+		if err != nil {
+			return err
+		}
+
+		switch args[0] {
+		case "get-stats":
 			interactable := asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
@@ -368,11 +407,46 @@ var contractInteractCmd = &cobra.Command{
 			}); err != nil {
 				return err
 			}
-		case VerifiableLoadConditional:
-			if args[1] != "get-stats" {
-				return fmt.Errorf("invalid action")
-			}
+		}
 
+		return nil
+	},
+}
+
+var contractInteractVerifiableCondCmd = &cobra.Command{
+	Use:       "verifiable-load-conditional [ACTION]",
+	Short:     "Run pre-defined actions for contract",
+	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
+	Args:      cobra.ExactArgs(1),
+	ValidArgs: []string{"get-stats"},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		conf := GetConfigFromContext(cmd.Context())
+		if conf == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
+		dConfig := config.GetDeployerConfig(conf)
+
+		keyConf := GetKeyConfigFromContext(cmd.Context())
+		if keyConf == nil {
+			return fmt.Errorf("missing private key config")
+		}
+
+		for _, key := range keyConf.Keys {
+			if key.Alias == dConfig.PrivateKey {
+				dConfig.PrivateKey = key.Value
+
+				break
+			}
+		}
+
+		deployer, err := asset.NewDeployer(&dConfig)
+		if err != nil {
+			return err
+		}
+
+		switch args[0] {
+		case "get-stats":
 			interactable := asset.NewVerifiableLoadConditionalDeployable(&asset.VerifiableLoadConfig{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,

@@ -8,6 +8,8 @@ import (
 	"syscall"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -125,12 +127,12 @@ var configStorePKCmd = &cobra.Command{
 			return err
 		}
 
-		configPath := GetConfigPathFromContext(cmd.Context())
-		if configPath == nil {
+		paths := GetPathsFromContext(cmd.Context())
+		if paths == nil {
 			return fmt.Errorf("missing config path in context")
 		}
 
-		conf, err := config.GetPrivateKeyConfig(*configPath)
+		conf, err := config.GetPrivateKeyConfig(paths.Base)
 		if err != nil {
 			return err
 		}
@@ -139,7 +141,7 @@ var configStorePKCmd = &cobra.Command{
 			if key.Alias == args[0] {
 				conf.Keys[idx].Value = string(pkBytes)
 
-				return config.SavePrivateKeyConfig(*configPath, conf)
+				return config.SavePrivateKeyConfig(paths.Base, conf)
 			}
 		}
 
@@ -148,6 +150,61 @@ var configStorePKCmd = &cobra.Command{
 			Value: string(pkBytes),
 		})
 
-		return config.SavePrivateKeyConfig(*configPath, conf)
+		return config.SavePrivateKeyConfig(paths.Base, conf)
+	},
+}
+
+var configCreatePKCmd = &cobra.Command{
+	Use:   "pk-create [NAME]",
+	Short: "Create a private key with the reference name",
+	Long:  `Create a new private key and store it under the provided reference name.`,
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		privateKey, err := crypto.GenerateKey()
+		if err != nil {
+			return err
+		}
+
+		keyBytes := crypto.FromECDSA(privateKey)
+
+		paths := GetPathsFromContext(cmd.Context())
+		if paths == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
+		conf, err := config.GetPrivateKeyConfig(paths.Base)
+		if err != nil {
+			return err
+		}
+
+		conf.Keys = append(conf.Keys, config.Key{
+			Alias: args[0],
+			Value: hexutil.Encode(keyBytes),
+		})
+
+		return config.SavePrivateKeyConfig(paths.Base, conf)
+	},
+}
+
+var configListPKCmd = &cobra.Command{
+	Use:   "pk-list",
+	Short: "Print list of private key aliases",
+	Long:  `List existing private key aliases`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		paths := GetPathsFromContext(cmd.Context())
+		if paths == nil {
+			return fmt.Errorf("missing config path in context")
+		}
+
+		conf, err := config.GetPrivateKeyConfig(paths.Base)
+		if err != nil {
+			return err
+		}
+
+		for _, key := range conf.Keys {
+			fmt.Println(key.Alias)
+		}
+
+		return nil
 	},
 }
