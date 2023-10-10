@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -70,7 +71,7 @@ func NewDeployer(cfg *DeployerConfig) (*Deployer, error) {
 	}
 
 	nodeClient := ethclient.NewClient(rpcClient)
-	privateKey := parsePrivateKey(cfg.PrivateKey)
+	privateKey := parsePrivateKey(strings.TrimSpace(cfg.PrivateKey))
 
 	address, err := getAddressFromKey(privateKey)
 	if err != nil {
@@ -118,8 +119,8 @@ func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) 
 	}
 
 	auth.Nonce = big.NewInt(int64(nonce))
-	auth.Value = big.NewInt(0)        // in wei
-	auth.GasLimit = d.Config.GasLimit // in units
+	auth.Value = big.NewInt(0) // in wei
+	// auth.GasLimit = d.Config.GasLimit // in units
 	auth.GasPrice = gasPrice
 
 	return auth, nil

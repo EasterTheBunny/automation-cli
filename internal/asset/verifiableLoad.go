@@ -42,19 +42,26 @@ const (
 	// retryNum defines how many times the go routine will attempt the same contract call
 	retryNum = 3
 	// maxUpkeepNum defines the size of channels. Increase if there are lots of upkeeps.
-	maxUpkeepNum       = 100
-	upkeepIDLength int = 8
+	maxUpkeepNum                = 100
+	upkeepIDLength        int   = 8
+	conditionalUpkeepType uint8 = 0
+	logtriggerUpkeepType  uint8 = 1
+	DefaultRegisterAmount       = 1_000_000_000_000_000_000
+	DefaultGasLimit             = 500_000
+	DefaultCheckGas             = 10_000
+	DefaultPerformGas           = 1_000
 )
 
 type VerifiableLoadConfig struct {
 	RegistrarAddr string
 	UseMercury    bool
 	UseArbitrum   bool
-	AutoLog       bool
 }
 
 type VerifiableLoadInteractionConfig struct {
-	ContractAddr string
+	ContractAddr             string
+	RegisterUpkeepCount      uint8
+	RegisteredUpkeepInterval uint32
 }
 
 type VerifiableLoadLogTriggerDeployable struct {
@@ -92,7 +99,7 @@ func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 
 	contractAddr, trx, _, err := verifiableLogTrigger.DeployVerifiableLoadLogTriggerUpkeep(
 		opts, deployer.Client, registrar,
-		d.cCfg.UseArbitrum, d.cCfg.AutoLog, d.cCfg.UseMercury)
+		d.cCfg.UseArbitrum, d.cCfg.UseMercury)
 	if err != nil {
 		return contractAddr, fmt.Errorf("%w: Verifiable Load Contract creation failed: %s", ErrContractCreate, err.Error())
 	}
@@ -107,7 +114,6 @@ func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 			contractAddr.String(),
 			registrar.String(),
 			fmt.Sprintf("%t", d.cCfg.UseArbitrum),
-			fmt.Sprintf("%t", d.cCfg.AutoLog),
 			fmt.Sprintf("%t", d.cCfg.UseMercury),
 		)
 	*/
@@ -147,7 +153,7 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
 	}
 
 	// get all active upkeep IDs on this verifiable load contract
-	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
+	upkeepIds, err := contract.GetActiveUpkeepIDsDeployedByThisContract(opts, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
 	}
@@ -217,6 +223,98 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
 	return nil
 }
 
+func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiableLogTrigger.NewVerifiableLoadLogTriggerUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	opts, err := deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err := contract.BatchRegisterUpkeeps(
+		opts, conf.RegisterUpkeepCount, DefaultGasLimit,
+		logtriggerUpkeepType, []byte{0x0},
+		big.NewInt(DefaultRegisterAmount),
+		big.NewInt(DefaultCheckGas),
+		big.NewInt(DefaultPerformGas),
+	)
+	if err != nil {
+		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	upkeepOpts := &bind.CallOpts{
+		Context: ctx,
+		From:    deployer.Address,
+	}
+
+	upkeepIDs, err := contract.GetActiveUpkeepIDsDeployedByThisContract(
+		upkeepOpts,
+		big.NewInt(0),
+		big.NewInt(int64(conf.RegisterUpkeepCount)),
+	)
+	if err != nil {
+		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
+	opts, err = deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	// batch set intervals resets the bucket perform capturing data
+	trx, err = contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	if err != nil {
+		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	opts, err = deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err = contract.BatchPreparingUpkeepsSimple(opts, upkeepIDs, 0, 0)
+	if err != nil {
+		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	opts, err = deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err = contract.BatchSendLogs(opts, 0)
+	if err != nil {
+		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	return nil
+}
+
 func (d *VerifiableLoadLogTriggerDeployable) connectToInterface(
 	_ context.Context,
 	addr common.Address,
@@ -265,6 +363,9 @@ func (d *VerifiableLoadConditionalDeployable) Deploy(
 
 	registrar := common.HexToAddress(d.cCfg.RegistrarAddr)
 
+	// fmt.Printf("%+v\n", opts)
+	// return registrar, fmt.Errorf("stop")
+
 	contractAddr, trx, _, err := verifiableConditional.DeployVerifiableLoadUpkeep(
 		opts, deployer.Client, registrar,
 		d.cCfg.UseArbitrum,
@@ -272,6 +373,8 @@ func (d *VerifiableLoadConditionalDeployable) Deploy(
 	if err != nil {
 		return contractAddr, fmt.Errorf("%w: Verifiable Load Contract creation failed: %s", ErrContractCreate, err.Error())
 	}
+
+	fmt.Println("waiting on transaction -- hash:", trx.Hash(), ", nonce:", trx.Nonce())
 
 	if err := deployer.waitDeployment(ctx, trx); err != nil {
 		return contractAddr, err
@@ -315,7 +418,7 @@ func (d *VerifiableLoadConditionalDeployable) ReadStats(
 	}
 
 	// get all active upkeep IDs on this verifiable load contract
-	upkeepIds, err := contract.GetActiveUpkeepIDs(opts, big.NewInt(0), big.NewInt(0))
+	upkeepIds, err := contract.GetActiveUpkeepIDsDeployedByThisContract(opts, big.NewInt(0), big.NewInt(0))
 	if err != nil {
 		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
 	}
@@ -385,6 +488,85 @@ func (d *VerifiableLoadConditionalDeployable) ReadStats(
 
 	//nolint:forbidigo
 	fmt.Println(writer.Render())
+
+	return nil
+}
+
+//nolint:funlen,cyclop
+func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiableConditional.NewVerifiableLoadUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	opts, err := deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err := contract.BatchRegisterUpkeeps(
+		opts, conf.RegisterUpkeepCount, DefaultGasLimit,
+		conditionalUpkeepType, []byte("0x00"),
+		big.NewInt(DefaultRegisterAmount),
+		big.NewInt(DefaultCheckGas),
+		big.NewInt(DefaultPerformGas),
+	)
+	if err != nil {
+		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	upkeepOpts := &bind.CallOpts{
+		Context: ctx,
+		From:    deployer.Address,
+	}
+
+	upkeepIDs, err := contract.GetActiveUpkeepIDsDeployedByThisContract(
+		upkeepOpts,
+		big.NewInt(0),
+		big.NewInt(int64(conf.RegisterUpkeepCount)),
+	)
+	if err != nil {
+		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
+	opts, err = deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	// batch set intervals resets the bucket perform capturing data
+	trx, err = contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	if err != nil {
+		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	opts, err = deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err = contract.BatchUpdatePipelineData(opts, upkeepIDs)
+	if err != nil {
+		return fmt.Errorf("%w: failed to update pipeline data: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
 
 	return nil
 }
