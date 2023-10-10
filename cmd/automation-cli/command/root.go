@@ -94,6 +94,12 @@ func InitializeCommands() {
 		"scope for cli configuration and persisted state",
 	)
 
+	_ = rootCmd.PersistentFlags().String(
+		"key",
+		"",
+		"use to override configured state private key for command",
+	)
+
 	_ = contractDeployCmd.Flags().
 		String("mode", "DEFAULT", "registry mode (applies to v2.x; valid options are DEFAULT, ARBITRUM, OPTIMISM)")
 

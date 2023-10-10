@@ -112,7 +112,6 @@ var contractConnectCmd = &cobra.Command{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseMercury:    conf.LogTriggerLoadContract.UseMercury,
 				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
-				AutoLog:       conf.LogTriggerLoadContract.AutoLog,
 			})
 
 			addr, err := deployable.Connect(cmd.Context(), args[1], deployer)
@@ -123,7 +122,6 @@ var contractConnectCmd = &cobra.Command{
 			viper.Set("log_trigger_load_contract.contract_address", addr)
 			viper.Set("log_trigger_load_contract.use_mercury", conf.LogTriggerLoadContract.UseMercury)
 			viper.Set("log_trigger_load_contract.use_arbitrum", conf.LogTriggerLoadContract.UseArbitrum)
-			viper.Set("log_trigger_load_contract.auto_log", conf.LogTriggerLoadContract.AutoLog)
 		case VerifiableLoadConditional:
 			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return ErrRegistrarNotAvailable
@@ -166,6 +164,16 @@ var contractDeployCmd = &cobra.Command{
 		}
 
 		dConfig := config.GetDeployerConfig(conf)
+		selectedPK := dConfig.PrivateKey
+
+		keyOverride, err := cmd.Flags().GetString("key")
+		if err != nil {
+			return err
+		}
+
+		if keyOverride != "" {
+			selectedPK = keyOverride
+		}
 
 		keyConf := GetKeyConfigFromContext(cmd.Context())
 		if keyConf == nil {
@@ -173,11 +181,15 @@ var contractDeployCmd = &cobra.Command{
 		}
 
 		for _, key := range keyConf.Keys {
-			if key.Alias == dConfig.PrivateKey {
+			if key.Alias == selectedPK {
 				dConfig.PrivateKey = key.Value
 
 				break
 			}
+		}
+
+		if dConfig.PrivateKey == "" {
+			return fmt.Errorf("private key alias not found")
 		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
@@ -230,7 +242,6 @@ var contractDeployCmd = &cobra.Command{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
 				UseMercury:    conf.LogTriggerLoadContract.UseMercury,
 				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
-				AutoLog:       conf.LogTriggerLoadContract.AutoLog,
 			})
 
 			addr, err := deployable.Deploy(cmd.Context(), deployer, verifyConf)
@@ -241,7 +252,6 @@ var contractDeployCmd = &cobra.Command{
 			viper.Set("log_trigger_load_contract.contract_address", addr)
 			viper.Set("log_trigger_load_contract.use_mercury", conf.LogTriggerLoadContract.UseMercury)
 			viper.Set("log_trigger_load_contract.use_arbitrum", conf.LogTriggerLoadContract.UseArbitrum)
-			viper.Set("log_trigger_load_contract.auto_log", conf.LogTriggerLoadContract.AutoLog)
 		case VerifiableLoadConditional:
 			if conf.ServiceContract.RegistrarAddress == "" || conf.ServiceContract.RegistrarAddress == "0x" {
 				return ErrRegistrarNotAvailable
@@ -364,11 +374,11 @@ var contractInteractRegistryCmd = &cobra.Command{
 }
 
 var contractInteractVerifiableLogCmd = &cobra.Command{
-	Use:       "verifiable-load-lot-trigger [ACTION]",
+	Use:       "verifiable-load-log-trigger [ACTION]",
 	Short:     "Run pre-defined actions for contract",
 	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
 	Args:      cobra.ExactArgs(1),
-	ValidArgs: []string{"get-stats"},
+	ValidArgs: []string{"get-stats", "register-upkeeps"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conf := GetConfigFromContext(cmd.Context())
 		if conf == nil {
@@ -376,6 +386,16 @@ var contractInteractVerifiableLogCmd = &cobra.Command{
 		}
 
 		dConfig := config.GetDeployerConfig(conf)
+		selectedPK := dConfig.PrivateKey
+
+		keyOverride, err := cmd.Flags().GetString("key")
+		if err != nil {
+			return err
+		}
+
+		if keyOverride != "" {
+			selectedPK = keyOverride
+		}
 
 		keyConf := GetKeyConfigFromContext(cmd.Context())
 		if keyConf == nil {
@@ -383,11 +403,15 @@ var contractInteractVerifiableLogCmd = &cobra.Command{
 		}
 
 		for _, key := range keyConf.Keys {
-			if key.Alias == dConfig.PrivateKey {
+			if key.Alias == selectedPK {
 				dConfig.PrivateKey = key.Value
 
 				break
 			}
+		}
+
+		if dConfig.PrivateKey == "" {
+			return fmt.Errorf("private key alias not found")
 		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
@@ -399,11 +423,24 @@ var contractInteractVerifiableLogCmd = &cobra.Command{
 		case "get-stats":
 			interactable := asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
 				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
-				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
+				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
 			})
 
 			if err := interactable.ReadStats(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
-				ContractAddr: conf.ConditionalLoadContract.ContractAddress,
+				ContractAddr: conf.LogTriggerLoadContract.ContractAddress,
+			}); err != nil {
+				return err
+			}
+		case "register-upkeeps":
+			interactable := asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
+			})
+
+			if err := interactable.RegisterUpkeeps(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
+				ContractAddr:             conf.LogTriggerLoadContract.ContractAddress,
+				RegisterUpkeepCount:      5,
+				RegisteredUpkeepInterval: 15,
 			}); err != nil {
 				return err
 			}
@@ -418,7 +455,7 @@ var contractInteractVerifiableCondCmd = &cobra.Command{
 	Short:     "Run pre-defined actions for contract",
 	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
 	Args:      cobra.ExactArgs(1),
-	ValidArgs: []string{"get-stats"},
+	ValidArgs: []string{"get-stats", "register-upkeeps"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conf := GetConfigFromContext(cmd.Context())
 		if conf == nil {
@@ -426,6 +463,16 @@ var contractInteractVerifiableCondCmd = &cobra.Command{
 		}
 
 		dConfig := config.GetDeployerConfig(conf)
+		selectedPK := dConfig.PrivateKey
+
+		keyOverride, err := cmd.Flags().GetString("key")
+		if err != nil {
+			return err
+		}
+
+		if keyOverride != "" {
+			selectedPK = keyOverride
+		}
 
 		keyConf := GetKeyConfigFromContext(cmd.Context())
 		if keyConf == nil {
@@ -433,11 +480,15 @@ var contractInteractVerifiableCondCmd = &cobra.Command{
 		}
 
 		for _, key := range keyConf.Keys {
-			if key.Alias == dConfig.PrivateKey {
+			if key.Alias == selectedPK {
 				dConfig.PrivateKey = key.Value
 
 				break
 			}
+		}
+
+		if dConfig.PrivateKey == "" {
+			return fmt.Errorf("private key alias not found")
 		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
@@ -454,6 +505,19 @@ var contractInteractVerifiableCondCmd = &cobra.Command{
 
 			if err := interactable.ReadStats(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
 				ContractAddr: conf.ConditionalLoadContract.ContractAddress,
+			}); err != nil {
+				return err
+			}
+		case "register-upkeeps":
+			interactable := asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
+				RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+				UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
+			})
+
+			if err := interactable.RegisterUpkeeps(cmd.Context(), deployer, asset.VerifiableLoadInteractionConfig{
+				ContractAddr:             conf.ConditionalLoadContract.ContractAddress,
+				RegisterUpkeepCount:      5,
+				RegisteredUpkeepInterval: 15,
 			}); err != nil {
 				return err
 			}

@@ -84,7 +84,6 @@ type LogTriggerLoadContract struct {
 	ContractAddress string `mapstructure:"contract_address"`
 	UseMercury      bool   `mapstructure:"use_mercury"`
 	UseArbitrum     bool   `mapstructure:"use_arbitrum"`
-	AutoLog         bool   `mapstructure:"auto_log"`
 }
 
 type ConditionalLoadContract struct {
