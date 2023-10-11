@@ -19,17 +19,29 @@ const (
 	ctxKeyConfigKey
 )
 
+var (
+	ErrFSOpFailure = fmt.Errorf("failed to perform operation on file system")
+)
+
+// StatePaths is a collection of file paths to configurations.
 type StatePaths struct {
-	Base        string
+	// Base is the file path to the base configuration.
+	Base string
+	// Environment is the file path to the environment configuration and overrides.
 	Environment string
 }
 
-func CreateStatePaths(base, environment string) (*StatePaths, error) {
+// CreateStatePaths ensures that the provided base and environment paths exist and will create them if they do not.
+// Returns file permissions related errors.
+func CreateStatePaths(base, environment string) (StatePaths, error) {
 	// check if starts with ~/ and replace with home directory
 	if strings.HasPrefix(base, "~/") {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return nil, err
+			return StatePaths{}, fmt.Errorf(
+				"%w: failed to get user home directory using prefix '~/': %s",
+				ErrFSOpFailure,
+				err.Error())
 		}
 
 		base = strings.Replace(base, "~", home, 1)
@@ -40,15 +52,18 @@ func CreateStatePaths(base, environment string) (*StatePaths, error) {
 	if _, err := os.Stat(environment); os.IsNotExist(err) {
 		abs, err := filepath.Abs(environment)
 		if err != nil {
-			return nil, err
+			return StatePaths{}, fmt.Errorf(
+				"%w: failed to get absolute path for environment: %s",
+				ErrFSOpFailure,
+				err.Error())
 		}
 
 		if err := os.MkdirAll(abs, 0760); err != nil {
-			return nil, err
+			return StatePaths{}, fmt.Errorf("%w: failed to make directories: %s", ErrFSOpFailure, err.Error())
 		}
 	}
 
-	return &StatePaths{
+	return StatePaths{
 		Base:        base,
 		Environment: environment,
 	}, nil

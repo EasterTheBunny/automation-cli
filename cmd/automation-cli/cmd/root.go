@@ -39,9 +39,10 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "automation-cli",
-	Short: "ChainLink Automation CLI tool to manage product assets",
-	Long:  `automation-cli is a CLI for running the product management commands.`,
+	Use:     "automation-cli",
+	Short:   "ChainLink Automation CLI tool to manage product assets",
+	Long:    `automation-cli is a CLI for running the product management commands.`,
+	Version: "v2.1",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		configPath, err := cmd.Flags().GetString("state-directory")
 		if err != nil {
@@ -58,7 +59,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 
-		ctx := context.AttachPaths(cmd.Context(), *paths)
+		ctx := context.AttachPaths(cmd.Context(), paths)
 
 		conf, err := config.GetConfig(paths.Environment)
 		if err != nil {

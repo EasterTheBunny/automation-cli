@@ -195,12 +195,18 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
 
 	sort.Float64s(uStats.SortedAllDelays)
 
-	percentiles, err := getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
-	if err != nil {
-		return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
-	}
+	var maxDelay float64
 
-	maxDelay := uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+	percentiles := make([]float64, 4)
+
+	if len(uStats.SortedAllDelays) > 0 {
+		percentiles, err = getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
+		if err != nil {
+			return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
+		}
+
+		maxDelay = uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+	}
 
 	writer.AppendFooter(table.Row{
 		"Total",
@@ -774,7 +780,7 @@ func registerNewUpkeeps(ctx context.Context, register upkeepRegister, deployer *
 
 	trx, err := register.BatchRegisterUpkeeps(
 		opts, uint8(count), DefaultGasLimit,
-		typ, []byte{},
+		typ, []byte{0x00},
 		big.NewInt(DefaultRegisterAmount),
 		big.NewInt(DefaultCheckGas),
 		big.NewInt(DefaultPerformGas),
