@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/montanaflynn/stats"
 
@@ -62,6 +63,7 @@ type VerifiableLoadInteractionConfig struct {
 	ContractAddr             string
 	RegisterUpkeepCount      uint8
 	RegisteredUpkeepInterval uint32
+	CancelBeforeRegister     bool
 }
 
 type VerifiableLoadLogTriggerDeployable struct {
@@ -235,47 +237,24 @@ func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
 		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
 	}
 
+	if conf.CancelBeforeRegister {
+		if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
+		}
+	}
+
+	upkeepIDs, err := registerNewUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount), logtriggerUpkeepType)
+	if err != nil {
+		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
 	opts, err := deployer.BuildTxOpts(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
 	}
 
-	trx, err := contract.BatchRegisterUpkeeps(
-		opts, conf.RegisterUpkeepCount, DefaultGasLimit,
-		logtriggerUpkeepType, []byte{0x0},
-		big.NewInt(DefaultRegisterAmount),
-		big.NewInt(DefaultCheckGas),
-		big.NewInt(DefaultPerformGas),
-	)
-	if err != nil {
-		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
-		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
-	}
-
-	upkeepOpts := &bind.CallOpts{
-		Context: ctx,
-		From:    deployer.Address,
-	}
-
-	upkeepIDs, err := contract.GetActiveUpkeepIDsDeployedByThisContract(
-		upkeepOpts,
-		big.NewInt(0),
-		big.NewInt(int64(conf.RegisterUpkeepCount)),
-	)
-	if err != nil {
-		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
-	}
-
-	opts, err = deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
 	// batch set intervals resets the bucket perform capturing data
-	trx, err = contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	trx, err := contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
 	if err != nil {
 		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
 	}
@@ -423,6 +402,10 @@ func (d *VerifiableLoadConditionalDeployable) ReadStats(
 		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
 	}
 
+	if len(upkeepIds) == 0 {
+		return fmt.Errorf("%w: no upkeeps registered", ErrContractRead)
+	}
+
 	uStats := &upkeepStats{BlockNumber: blockNum}
 	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
 	idChan := make(chan *big.Int, maxUpkeepNum)
@@ -462,12 +445,18 @@ func (d *VerifiableLoadConditionalDeployable) ReadStats(
 
 	sort.Float64s(uStats.SortedAllDelays)
 
-	percentiles, err := getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
-	if err != nil {
-		return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
-	}
+	var maxDelay float64
 
-	maxDelay := uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+	percentiles := make([]float64, 4)
+
+	if len(uStats.SortedAllDelays) > 0 {
+		percentiles, err = getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
+		if err != nil {
+			return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
+		}
+
+		maxDelay = uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+	}
 
 	writer.AppendFooter(table.Row{
 		"Total",
@@ -505,47 +494,24 @@ func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
 		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
 	}
 
+	if conf.CancelBeforeRegister {
+		if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
+		}
+	}
+
+	upkeepIDs, err := registerNewUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount), conditionalUpkeepType)
+	if err != nil {
+		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
+	}
+
 	opts, err := deployer.BuildTxOpts(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
 	}
 
-	trx, err := contract.BatchRegisterUpkeeps(
-		opts, conf.RegisterUpkeepCount, DefaultGasLimit,
-		conditionalUpkeepType, []byte("0x00"),
-		big.NewInt(DefaultRegisterAmount),
-		big.NewInt(DefaultCheckGas),
-		big.NewInt(DefaultPerformGas),
-	)
-	if err != nil {
-		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
-		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
-	}
-
-	upkeepOpts := &bind.CallOpts{
-		Context: ctx,
-		From:    deployer.Address,
-	}
-
-	upkeepIDs, err := contract.GetActiveUpkeepIDsDeployedByThisContract(
-		upkeepOpts,
-		big.NewInt(0),
-		big.NewInt(int64(conf.RegisterUpkeepCount)),
-	)
-	if err != nil {
-		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
-	}
-
-	opts, err = deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
 	// batch set intervals resets the bucket perform capturing data
-	trx, err = contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	trx, err := contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
 	if err != nil {
 		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
 	}
@@ -669,16 +635,23 @@ func getUpkeepInfo(
 				info.TotalDelayBlock += d
 			}
 		}
+
 		sort.Float64s(delays)
 		info.SortedAllDelays = delays
 		info.TotalPerforms = uint64(len(info.SortedAllDelays))
 
-		percentiles, err := getPercentiles(info.SortedAllDelays, P50, P90, P95, P99)
-		if err != nil {
-			log.Println(err)
-		}
+		var maxDelay float64
 
-		maxDelay := info.SortedAllDelays[len(info.SortedAllDelays)-1]
+		percentiles := make([]float64, 4)
+
+		if len(info.SortedAllDelays) > 0 {
+			percentiles, err = getPercentiles(info.SortedAllDelays, P50, P90, P95, P99)
+			if err != nil {
+				log.Println(err)
+			}
+
+			maxDelay = info.SortedAllDelays[len(info.SortedAllDelays)-1]
+		}
 
 		writer.AppendRow(table.Row{
 			shorten(upkeepID.String(), upkeepIDLength),
@@ -756,4 +729,73 @@ func getPercentiles(delays []float64, percentiles ...float64) ([]float64, error)
 	}
 
 	return calculated, nil
+}
+
+type upkeepCanceller interface {
+	GetActiveUpkeepIDsDeployedByThisContract(*bind.CallOpts, *big.Int, *big.Int) ([]*big.Int, error)
+	BatchCancelUpkeeps(*bind.TransactOpts, []*big.Int) (*types.Transaction, error)
+}
+
+func cancelUpkeeps(ctx context.Context, canceller upkeepCanceller, deployer *Deployer, count int64) error {
+	oldUpkeepIds, err := canceller.GetActiveUpkeepIDsDeployedByThisContract(
+		&bind.CallOpts{
+			Context: ctx,
+			From:    deployer.Address,
+		},
+		big.NewInt(0),
+		big.NewInt(count),
+	)
+	if err != nil {
+		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
+	trx, err := canceller.BatchCancelUpkeeps(nil, oldUpkeepIds)
+	if err != nil {
+		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	return nil
+}
+
+type upkeepRegister interface {
+	BatchRegisterUpkeeps(*bind.TransactOpts, uint8, uint32, uint8, []byte, *big.Int, *big.Int, *big.Int) (*types.Transaction, error)
+	GetActiveUpkeepIDsDeployedByThisContract(*bind.CallOpts, *big.Int, *big.Int) ([]*big.Int, error)
+}
+
+func registerNewUpkeeps(ctx context.Context, register upkeepRegister, deployer *Deployer, count int64, typ uint8) ([]*big.Int, error) {
+	opts, err := deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err := register.BatchRegisterUpkeeps(
+		opts, uint8(count), DefaultGasLimit,
+		typ, []byte{},
+		big.NewInt(DefaultRegisterAmount),
+		big.NewInt(DefaultCheckGas),
+		big.NewInt(DefaultPerformGas),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return nil, fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	upkeepOpts := &bind.CallOpts{
+		Context: ctx,
+		From:    deployer.Address,
+	}
+
+	upkeepIDs, err := register.GetActiveUpkeepIDsDeployedByThisContract(upkeepOpts, big.NewInt(0), big.NewInt(count))
+	if err != nil {
+		return nil, fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
+	}
+
+	return upkeepIDs, nil
 }
