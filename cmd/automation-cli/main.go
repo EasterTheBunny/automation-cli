@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/easterthebunny/automation-cli/cmd/automation-cli/command"
+	"github.com/easterthebunny/automation-cli/cmd/automation-cli/cmd"
 )
 
 func main() {
-	command.InitializeCommands()
-
-	if err := command.Run(); err != nil {
+	if err := cmd.Run(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
