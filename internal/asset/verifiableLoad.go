@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/easterthebunny/automation-cli/internal/util"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -142,12 +143,6 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
 		return fmt.Errorf("%w: failed to get block number: %s", ErrContractRead, err.Error())
 	}
 
-	writer := table.NewWriter()
-
-	writer.SetTitle(fmt.Sprintf("Upkeep Results --> (All STATS BELOW ARE CALCULATED AT BLOCK %d)", blockNum))
-	writer.AppendHeader(headerRowOne, table.RowConfig{AutoMerge: true})
-	writer.AppendHeader(headerRowTwo)
-
 	opts := &bind.CallOpts{
 		From:        deployer.Address,
 		Context:     ctx,
@@ -160,75 +155,7 @@ func (d *VerifiableLoadLogTriggerDeployable) ReadStats(
 		return fmt.Errorf("%w: failed to get active upkeep IDs from %s: %s", ErrContractRead, addr, err.Error())
 	}
 
-	uStats := &upkeepStats{BlockNumber: blockNum}
-	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
-	idChan := make(chan *big.Int, maxUpkeepNum)
-
-	var group sync.WaitGroup
-
-	// create a number of workers to process the upkeep ids in batch
-	for i := 0; i < workerNum; i++ {
-		group.Add(1)
-
-		go func() {
-			defer group.Done()
-
-			getUpkeepInfo(writer, idChan, resultsChan, contract, opts)
-		}()
-	}
-
-	for _, id := range upkeepIds {
-		idChan <- id
-	}
-
-	close(idChan)
-	group.Wait()
-
-	close(resultsChan)
-
-	for info := range resultsChan {
-		uStats.AllInfos = append(uStats.AllInfos, info)
-		uStats.TotalPerforms += info.TotalPerforms
-		uStats.TotalDelayBlock += info.TotalDelayBlock
-		uStats.SortedAllDelays = append(uStats.SortedAllDelays, info.SortedAllDelays...)
-	}
-
-	sort.Float64s(uStats.SortedAllDelays)
-
-	var maxDelay float64
-
-	percentiles := make([]float64, 4)
-
-	if len(uStats.SortedAllDelays) > 0 {
-		percentiles, err = getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
-		if err != nil {
-			return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
-		}
-
-		maxDelay = uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
-	}
-
-	writer.AppendFooter(table.Row{
-		"Total",
-		uStats.TotalPerforms,
-		fmt.Sprintf("%f", percentiles[0]),
-		fmt.Sprintf("%f", percentiles[1]),
-		fmt.Sprintf("%f", percentiles[2]),
-		fmt.Sprintf("%f", percentiles[3]),
-		fmt.Sprintf("%f", maxDelay),
-		fmt.Sprintf("%f", uStats.TotalDelayBlock),
-		fmt.Sprintf("%f", uStats.TotalDelayBlock/float64(uStats.TotalPerforms)),
-	})
-
-	writer.SetAutoIndex(true)
-	writer.SetStyle(table.StyleLight)
-
-	writer.Style().Options.SeparateRows = true
-
-	//nolint:forbidigo
-	fmt.Println(writer.Render())
-
-	return nil
+	return collectAndWriteStats(ctx, contract, upkeepIds, blockNum, opts)
 }
 
 func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
@@ -254,46 +181,21 @@ func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
 		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
 	}
 
-	opts, err := deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
-	// batch set intervals resets the bucket perform capturing data
-	trx, err := contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
-	if err != nil {
-		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
+	if err := runContractFunc(ctx, deployer, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	}); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
 	}
 
-	opts, err = deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
-	trx, err = contract.BatchPreparingUpkeepsSimple(opts, upkeepIDs, 0, 0)
-	if err != nil {
-		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
+	if err := runContractFunc(ctx, deployer, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return contract.BatchPreparingUpkeepsSimple(opts, upkeepIDs, 0, 0)
+	}); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
 	}
 
-	opts, err = deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
-	trx, err = contract.BatchSendLogs(opts, 0)
-	if err != nil {
-		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
+	if err := runContractFunc(ctx, deployer, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return contract.BatchSendLogs(opts, 0)
+	}); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
 	}
 
@@ -431,79 +333,7 @@ func (d *VerifiableLoadConditionalDeployable) ReadStats(
 		return fmt.Errorf("%w: no upkeeps registered", ErrContractRead)
 	}
 
-	uStats := &upkeepStats{BlockNumber: blockNum}
-	resultsChan := make(chan *upkeepInfo, maxUpkeepNum)
-	idChan := make(chan *big.Int, maxUpkeepNum)
-	writer := table.NewWriter()
-
-	writer.SetTitle(fmt.Sprintf("Upkeep Results --> (All STATS BELOW ARE CALCULATED AT BLOCK %d)", blockNum))
-	writer.AppendHeader(headerRowOne, table.RowConfig{AutoMerge: true})
-	writer.AppendHeader(headerRowTwo)
-
-	var group sync.WaitGroup
-
-	// create a number of workers to process the upkeep ids in batch
-	for i := 0; i < workerNum; i++ {
-		group.Add(1)
-
-		go func() {
-			defer group.Done()
-
-			getUpkeepInfo(writer, idChan, resultsChan, contract, opts)
-		}()
-	}
-
-	for _, id := range upkeepIds {
-		idChan <- id
-	}
-
-	close(idChan)
-	group.Wait()
-	close(resultsChan)
-
-	for info := range resultsChan {
-		uStats.AllInfos = append(uStats.AllInfos, info)
-		uStats.TotalPerforms += info.TotalPerforms
-		uStats.TotalDelayBlock += info.TotalDelayBlock
-		uStats.SortedAllDelays = append(uStats.SortedAllDelays, info.SortedAllDelays...)
-	}
-
-	sort.Float64s(uStats.SortedAllDelays)
-
-	var maxDelay float64
-
-	percentiles := make([]float64, 4)
-
-	if len(uStats.SortedAllDelays) > 0 {
-		percentiles, err = getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
-		if err != nil {
-			return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
-		}
-
-		maxDelay = uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
-	}
-
-	writer.AppendFooter(table.Row{
-		"Total",
-		uStats.TotalPerforms,
-		fmt.Sprintf("%f", percentiles[0]),
-		fmt.Sprintf("%f", percentiles[1]),
-		fmt.Sprintf("%f", percentiles[2]),
-		fmt.Sprintf("%f", percentiles[3]),
-		fmt.Sprintf("%f", maxDelay),
-		fmt.Sprintf("%f", uStats.TotalDelayBlock),
-		fmt.Sprintf("%f", uStats.TotalDelayBlock/float64(uStats.TotalPerforms)),
-	})
-
-	writer.SetAutoIndex(true)
-	writer.SetStyle(table.StyleLight)
-
-	writer.Style().Options.SeparateRows = true
-
-	//nolint:forbidigo
-	fmt.Println(writer.Render())
-
-	return nil
+	return collectAndWriteStats(ctx, contract, upkeepIds, blockNum, opts)
 }
 
 //nolint:funlen,cyclop
@@ -530,32 +360,15 @@ func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
 		return fmt.Errorf("%w: failed to register upkeeps: %s", ErrContractConnection, err.Error())
 	}
 
-	opts, err := deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
-	// batch set intervals resets the bucket perform capturing data
-	trx, err := contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
-	if err != nil {
-		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
+	if err := runContractFunc(ctx, deployer, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return contract.BatchSetIntervals(opts, upkeepIDs, conf.RegisteredUpkeepInterval)
+	}); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
 	}
 
-	opts, err = deployer.BuildTxOpts(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
-	}
-
-	trx, err = contract.BatchUpdatePipelineData(opts, upkeepIDs)
-	if err != nil {
-		return fmt.Errorf("%w: failed to update pipeline data: %s", ErrContractConnection, err.Error())
-	}
-
-	if err := deployer.wait(ctx, trx); err != nil {
+	if err := runContractFunc(ctx, deployer, func(opts *bind.TransactOpts) (*types.Transaction, error) {
+		return contract.BatchUpdatePipelineData(opts, upkeepIDs)
+	}); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
 	}
 
@@ -624,6 +437,61 @@ type verifiableLoadContract interface {
 	Counters(*bind.CallOpts, *big.Int) (*big.Int, error)
 	Buckets(*bind.CallOpts, *big.Int) (uint16, error)
 	GetBucketedDelays(*bind.CallOpts, *big.Int, uint16) ([]*big.Int, error)
+}
+
+func getUpkeepInfoJob(upkeepID *big.Int, contract verifiableLoadContract, opts *bind.CallOpts) util.Job[*upkeepInfo] {
+	return func(ctx context.Context) *upkeepInfo {
+		// fetch how many times this upkeep has been executed
+		counter, err := contract.Counters(opts, upkeepID)
+		if err != nil {
+			log.Fatalf("failed to get counter for %s: %v", upkeepID.String(), err)
+		}
+
+		// get all the buckets of an upkeep. 100 performs is a bucket.
+		bucket, err := contract.Buckets(opts, upkeepID)
+		if err != nil {
+			log.Fatalf("failed to get current bucket count for %s: %v", upkeepID.String(), err)
+		}
+
+		info := &upkeepInfo{
+			ID:            upkeepID,
+			Bucket:        bucket,
+			TotalPerforms: counter.Uint64(),
+			DelayBuckets:  map[uint16][]float64{},
+		}
+
+		var (
+			delays []float64
+			group  sync.WaitGroup
+		)
+
+		for idx := uint16(0); idx <= bucket; idx++ {
+			group.Add(1)
+
+			go func(idx uint16) {
+				defer group.Done()
+
+				getBucketData(contract, opts, upkeepID, idx, info)
+			}(idx)
+		}
+
+		group.Wait()
+
+		for i := uint16(0); i <= bucket; i++ {
+			bucketDelays := info.DelayBuckets[i]
+			delays = append(delays, bucketDelays...)
+
+			for _, d := range bucketDelays {
+				info.TotalDelayBlock += d
+			}
+		}
+
+		sort.Float64s(delays)
+		info.SortedAllDelays = delays
+		info.TotalPerforms = uint64(len(info.SortedAllDelays))
+
+		return info
+	}
 }
 
 //nolint:funlen
@@ -842,4 +710,115 @@ func registerNewUpkeeps(ctx context.Context, register upkeepRegister, deployer *
 	}
 
 	return upkeepIDs, nil
+}
+
+func runContractFunc(ctx context.Context, deployer *Deployer, fn func(*bind.TransactOpts) (*types.Transaction, error)) error {
+	opts, err := deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
+	}
+
+	trx, err := fn(opts)
+	if err != nil {
+		return fmt.Errorf("%w: failed to set upkeep intervals: %s", ErrContractConnection, err.Error())
+	}
+
+	if err := deployer.wait(ctx, trx); err != nil {
+		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	return nil
+}
+
+func collectAndWriteStats(
+	ctx context.Context,
+	contract verifiableLoadContract,
+	upkeepIDs []*big.Int,
+	block uint64,
+	opts *bind.CallOpts,
+) error {
+	uStats := &upkeepStats{BlockNumber: block}
+	jobs := make([]util.Job[*upkeepInfo], len(upkeepIDs))
+
+	for idx := range upkeepIDs {
+		jobs[idx] = getUpkeepInfoJob(upkeepIDs[idx], contract, opts)
+	}
+
+	results := util.NewParallel[*upkeepInfo](20).RunWithContext(ctx, jobs)
+	writer := table.NewWriter()
+
+	writer.SetTitle(fmt.Sprintf("Upkeep Results --> (All STATS BELOW ARE CALCULATED AT BLOCK %d)", block))
+	writer.AppendHeader(headerRowOne, table.RowConfig{AutoMerge: true})
+	writer.AppendHeader(headerRowTwo)
+
+	for _, info := range results {
+		var maxDelay float64
+		var err error
+
+		percentiles := make([]float64, 4)
+
+		if len(info.SortedAllDelays) > 0 {
+			percentiles, err = getPercentiles(info.SortedAllDelays, P50, P90, P95, P99)
+			if err != nil {
+				return err
+			}
+
+			maxDelay = info.SortedAllDelays[len(info.SortedAllDelays)-1]
+		}
+
+		writer.AppendRow(table.Row{
+			shorten(info.ID.String(), upkeepIDLength),
+			fmt.Sprintf("%d", info.TotalPerforms),
+			fmt.Sprintf("%f", percentiles[0]),
+			fmt.Sprintf("%f", percentiles[1]),
+			fmt.Sprintf("%f", percentiles[2]),
+			fmt.Sprintf("%f", percentiles[3]),
+			fmt.Sprintf("%f", maxDelay),
+			fmt.Sprintf("%d", uint64(info.TotalDelayBlock)),
+			fmt.Sprintf("%f", info.TotalDelayBlock/float64(info.TotalPerforms)),
+		}, table.RowConfig{AutoMerge: true})
+
+		uStats.AllInfos = append(uStats.AllInfos, info)
+		uStats.TotalPerforms += info.TotalPerforms
+		uStats.TotalDelayBlock += info.TotalDelayBlock
+		uStats.SortedAllDelays = append(uStats.SortedAllDelays, info.SortedAllDelays...)
+	}
+
+	sort.Float64s(uStats.SortedAllDelays)
+
+	var maxDelay float64
+	var err error
+
+	percentiles := make([]float64, 4)
+
+	if len(uStats.SortedAllDelays) > 0 {
+		percentiles, err = getPercentiles(uStats.SortedAllDelays, P50, P90, P95, P99)
+		if err != nil {
+			return fmt.Errorf("%w: percentile calculation: %s", ErrContractRead, err.Error())
+		}
+
+		maxDelay = uStats.SortedAllDelays[len(uStats.SortedAllDelays)-1]
+	}
+
+	writer.AppendFooter(table.Row{
+		"Total",
+		uStats.TotalPerforms,
+		fmt.Sprintf("%f", percentiles[0]),
+		fmt.Sprintf("%f", percentiles[1]),
+		fmt.Sprintf("%f", percentiles[2]),
+		fmt.Sprintf("%f", percentiles[3]),
+		fmt.Sprintf("%f", maxDelay),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock),
+		fmt.Sprintf("%f", uStats.TotalDelayBlock/float64(uStats.TotalPerforms)),
+	})
+
+	writer.SetAutoIndex(true)
+	writer.SetStyle(table.StyleLight)
+
+	writer.Style().Options.SeparateRows = true
+
+	//nolint:forbidigo
+	fmt.Println(writer.Render())
+
+	return nil
 }
