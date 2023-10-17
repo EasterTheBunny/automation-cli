@@ -171,7 +171,7 @@ func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
 	}
 
 	if conf.CancelBeforeRegister {
-		if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+		if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
 		}
 	}
@@ -214,7 +214,7 @@ func (d *VerifiableLoadLogTriggerDeployable) CancelUpkeeps(
 		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
 	}
 
-	if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+	if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 		return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
 	}
 
@@ -350,7 +350,7 @@ func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
 	}
 
 	if conf.CancelBeforeRegister {
-		if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+		if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
 		}
 	}
@@ -387,7 +387,7 @@ func (d *VerifiableLoadConditionalDeployable) CancelUpkeeps(
 		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
 	}
 
-	if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+	if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 		return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
 	}
 
@@ -648,14 +648,14 @@ type upkeepCanceller interface {
 	BatchCancelUpkeeps(*bind.TransactOpts, []*big.Int) (*types.Transaction, error)
 }
 
-func cancelUpkeeps(ctx context.Context, canceller upkeepCanceller, deployer *Deployer, count int64) error {
+func cancelAllUpkeeps(ctx context.Context, canceller upkeepCanceller, deployer *Deployer) error {
 	oldUpkeepIds, err := canceller.GetActiveUpkeepIDsDeployedByThisContract(
 		&bind.CallOpts{
 			Context: ctx,
 			From:    deployer.Address,
 		},
 		big.NewInt(0),
-		big.NewInt(count),
+		big.NewInt(0),
 	)
 	if err != nil {
 		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
