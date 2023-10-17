@@ -300,6 +300,25 @@ func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
 	return nil
 }
 
+func (d *VerifiableLoadLogTriggerDeployable) CancelUpkeeps(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiableLogTrigger.NewVerifiableLoadLogTriggerUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+		return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
+	}
+
+	return nil
+}
+
 func (d *VerifiableLoadLogTriggerDeployable) connectToInterface(
 	_ context.Context,
 	addr common.Address,
@@ -538,6 +557,25 @@ func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
 
 	if err := deployer.wait(ctx, trx); err != nil {
 		return fmt.Errorf("%w: transaction failed: %s", ErrContractConnection, err.Error())
+	}
+
+	return nil
+}
+
+func (d *VerifiableLoadConditionalDeployable) CancelUpkeeps(
+	ctx context.Context,
+	deployer *Deployer,
+	conf VerifiableLoadInteractionConfig,
+) error {
+	addr := common.HexToAddress(conf.ContractAddr)
+
+	contract, err := verifiableConditional.NewVerifiableLoadUpkeep(addr, deployer.Client)
+	if err != nil {
+		return fmt.Errorf("failed to create a new verifiable load upkeep from address %s: %v", addr, err)
+	}
+
+	if err := cancelUpkeeps(ctx, contract, deployer, int64(conf.RegisterUpkeepCount)); err != nil {
+		return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
 	}
 
 	return nil

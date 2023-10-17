@@ -30,7 +30,7 @@ var loadCmd = &cobra.Command{
 		}
 
 		if len(args) == 1 {
-			return []string{"get-stats", "register-upkeeps"}, cobra.ShellCompDirectiveNoFileComp
+			return []string{"get-stats", "register-upkeeps", "cancel-upkeeps"}, cobra.ShellCompDirectiveNoFileComp
 		}
 
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -91,6 +91,10 @@ var loadCmd = &cobra.Command{
 			if err := runRegisterUpkeeps(cmd.Context(), args[0], conf, deployer, vlic); err != nil {
 				return err
 			}
+		case "cancel-upkeeps":
+			if err := runCancelUpkeeps(cmd.Context(), args[0], conf, deployer, vlic); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -103,6 +107,10 @@ type statsReader interface {
 
 type upkeepRegister interface {
 	RegisterUpkeeps(context.Context, *asset.Deployer, asset.VerifiableLoadInteractionConfig) error
+}
+
+type upkeepCanceller interface {
+	CancelUpkeeps(context.Context, *asset.Deployer, asset.VerifiableLoadInteractionConfig) error
 }
 
 func runGetStats(
@@ -165,6 +173,39 @@ func runRegisterUpkeeps(
 	}
 
 	if err := register.RegisterUpkeeps(ctx, deployer, vlic); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func runCancelUpkeeps(
+	ctx context.Context,
+	contractType string,
+	conf *config.Config,
+	deployer *asset.Deployer,
+	vlic asset.VerifiableLoadInteractionConfig,
+) error {
+	var register upkeepCanceller
+
+	switch contractType {
+	case "conditional":
+		register = asset.NewVerifiableLoadConditionalDeployable(&asset.VerifiableLoadConfig{
+			RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+			UseArbitrum:   conf.ConditionalLoadContract.UseArbitrum,
+		})
+
+		vlic.ContractAddr = conf.ConditionalLoadContract.ContractAddress
+	case "log-trigger":
+		register = asset.NewVerifiableLoadLogTriggerDeployable(&asset.VerifiableLoadConfig{
+			RegistrarAddr: conf.ServiceContract.RegistrarAddress,
+			UseArbitrum:   conf.LogTriggerLoadContract.UseArbitrum,
+		})
+
+		vlic.ContractAddr = conf.LogTriggerLoadContract.ContractAddress
+	}
+
+	if err := register.CancelUpkeeps(ctx, deployer, vlic); err != nil {
 		return err
 	}
 
