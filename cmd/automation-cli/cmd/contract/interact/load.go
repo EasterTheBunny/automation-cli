@@ -23,7 +23,29 @@ var loadCmd = &cobra.Command{
 	Use:   "verifiable-load [TYPE] [ACTION]",
 	Short: "Run pre-defined actions on a verifiable load contract.",
 	Long:  `Run pre-defined actions on a verifiable load contract.`,
-	Args:  cobra.ExactArgs(2),
+	Example: `With an existing running environment and key (non-default) to do the following:
+
+- cancel all existing upkeeps
+- register new upkeeps
+- collect and print delay statistics to console
+
+$ automation-cli contract interact verifiable-load log-trigger register-upkeeps --environment="non.default" --key="mumbai-dev" --cancel-upkeeps
+$ automation-cli contract interact verifiable-load log-trigger get-stats --environment="non.default" --key="mumbai-dev"
+
+The above example assumes an environment set up with the name "non.default" and a verifiable load log trigger contract
+deployed to that environment. Also, a key with the name "mumbai-dev" is used. The first command cancels all existing
+upkeeps on the contract and deploys 5 (default count) new ones. The second command reads the captured delay data on the
+contract and displays it to the console.
+
+With the same setup above, to cancel all existing upkeeps only do the following:
+
+$ automation-cli contract interact verifiable-load log-trigger cancel-upkeeps --environment="non.default" --key="mumbai-dev"
+
+With the default environment and the same private key, leave off the "environment" and "key" parameters:
+
+$ automation-cli contract interact verifiable-load log-trigger register-upkeeps --cancel-upkeeps
+$ automation-cli contract interact verifiable-load log-trigger get-stats`,
+	Args: cobra.ExactArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return []string{"conditional", "log-trigger"}, cobra.ShellCompDirectiveNoFileComp

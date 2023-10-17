@@ -10,8 +10,16 @@ environment interaction process.
 Use make to build the application. The command line tool is structured using Cobra, so you can ask for command help at
 any level with the `-h` flag.
 
+**Make and Run**
 ```
-make build && ./bin/automation-cli -h
+$ make build && ./bin/automation-cli -h
+```
+
+**Install and Run**
+```
+$ cd cmd/automation-cli
+$ go install
+$ automation-cli -h
 ```
 
 ## Setup
@@ -21,7 +29,7 @@ the other could be `staging.mumbai`. This maintains state for both using the sam
 global and allows setting the environment to be set for any command.
 
 ```
-automation-cli --environment="local.mumbai"
+$ automation-cli --environment="local.mumbai"
 ```
 
 ### Add Private Keys
@@ -30,7 +38,7 @@ alias references to private keys. To add a private key run the following, but be
 per network, they are globally available:
 
 ```
-automation-cli config pk-store [ALIAS]
+$ automation-cli config pk-store [ALIAS]
 ```
 
 ### Setup Environment
@@ -39,7 +47,7 @@ a new environment or update the values in an existing environment and remember t
 the alias and not the actual private key:
 
 ```
-automation-cli config setup --environment="some.environment"
+$ automation-cli config setup --environment="some.environment"
 ```
 
 ## Contract Management
@@ -56,20 +64,20 @@ If you know the address of an existing contract and just want to connect and sto
 CLI tool, use the following command. Remember to define your environment or it will select the default (default).
 
 ```
-automation-cli contract connect registry [ADDRESS] --environment"some.environment"
+$ automation-cli contract connect registry [ADDRESS] --environment"some.environment"
 ```
 
 You can get help on the available contract types that you can connect to:
 
 ```
-automation-cli contract connect -h
+$ automation-cli contract connect -h
 ```
 
 ### Deploying Contracts
 Deploying contracts uses a similar method, but will save the resulting contract address to the environment config state.
 
 ```
-automation-cli contract deploy registry --environment="some.environment"
+$ automation-cli contract deploy registry --environment="some.environment"
 ```
 
 This command will use the existing configuration within the environment to deploy a contract. Some contracts require
@@ -82,8 +90,8 @@ commands. An example interaction follows where statistics are printed from a ver
 
 ```
 # connect to the verifiable load contract first if you haven't already
-automation-cli contract connect verifiable-load-conditional [ADDRESS]
+$ automation-cli contract connect verifiable-load-conditional [ADDRESS]
 
 # run an interaction against the contract
-automation-cli contract interact verifiable-load-conditional get-stats
+$ automation-cli contract interact verifiable-load-conditional get-stats
 ```
