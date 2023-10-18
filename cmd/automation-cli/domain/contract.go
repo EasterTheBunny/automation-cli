@@ -5,6 +5,8 @@ const (
 	Registry                  = "registry"
 	VerifiableLoadLogTrigger  = "verifiable-load-log-trigger"
 	VerifiableLoadConditional = "verifiable-load-conditional"
+	LinkToken                 = "link-token"
+	LinkEthFeed               = "link-eth-feed"
 )
 
 var (
@@ -13,5 +15,7 @@ var (
 		Registry,
 		VerifiableLoadLogTrigger,
 		VerifiableLoadConditional,
+		LinkToken,
+		LinkEthFeed,
 	}
 )

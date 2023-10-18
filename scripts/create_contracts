@@ -1,0 +1,20 @@
+#!/bin/bash
+
+ENVIRONMENT="default"
+KEY="default"
+
+automation-cli contract deploy link-token --environment=${ENVIRONMENT} --key=${KEY}
+echo "link token address: "
+automation-cli config get link_contract_address --environment=${ENVIRONMENT}
+
+automation-cli contract deploy link-eth-feed --environment=${ENVIRONMENT} --key=${KEY}
+echo "link eth feed address: "
+automation-cli config get link_eth_feed --environment=${ENVIRONMENT}
+
+automation-cli contract deploy registry --environment=${ENVIRONMENT} --key=${KEY}
+echo "registry address: "
+automation-cli config get service_contract.registry_address --environment=${ENVIRONMENT}
+
+automation-cli contract deploy registrar --environment=${ENVIRONMENT} --key=${KEY}
+echo "registrar address: "
+automation-cli config get service_contract.registrar_address --environment=${ENVIRONMENT}

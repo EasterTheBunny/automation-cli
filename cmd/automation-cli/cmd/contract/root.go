@@ -38,7 +38,9 @@ var contractConnectCmd = &cobra.Command{
 	registrar - contract to control upkeep registry
     registry - base set of contracts for an automation service
 	verifiable-load-log-trigger - log trigger specific verifiable load contract
-	verifiable-load-conditional - conditional trigger verifiable load contract`,
+	verifiable-load-conditional - conditional trigger verifiable load contract
+	link-token - LINK token contract
+	link-eth-feed - LINK-ETH price feed`,
 	ValidArgs: domain.ContractNames,
 	Args:      cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -132,6 +134,26 @@ var contractConnectCmd = &cobra.Command{
 
 			viper.Set("conditional_load_contract.contract_address", addr)
 			viper.Set("conditional_load_contract.use_arbitrum", conf.ConditionalLoadContract.UseArbitrum)
+		case domain.LinkToken:
+			deployable := asset.NewLinkTokenDeployable()
+
+			addr, err := deployable.Connect(cmd.Context(), args[1], deployer)
+			if err != nil {
+				return err
+			}
+
+			viper.Set("link_contract_address", addr)
+		case domain.LinkEthFeed:
+			deployable := asset.NewLinkETHFeedDeployable(&asset.LinkETHFeedConfig{
+				Answer: 2e18,
+			})
+
+			addr, err := deployable.Connect(cmd.Context(), args[1], deployer)
+			if err != nil {
+				return err
+			}
+
+			viper.Set("link_eth_feed", addr)
 		}
 
 		return nil
@@ -147,7 +169,8 @@ var contractDeployCmd = &cobra.Command{
 	registrar - contract to control upkeep registry
     registry - base set of contracts for an automation service
 	verifiable-load-log-trigger - log trigger specific verifiable load contract
-	verifiable-load-conditional - conditional trigger verifiable load contract`,
+	verifiable-load-conditional - conditional trigger verifiable load contract
+	link-token - LINK token contract`,
 	ValidArgs: domain.ContractNames,
 	Args:      cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -262,6 +285,26 @@ var contractDeployCmd = &cobra.Command{
 
 			viper.Set("conditional_load_contract.contract_address", addr)
 			viper.Set("conditional_load_contract.use_arbitrum", conf.ConditionalLoadContract.UseArbitrum)
+		case domain.LinkToken:
+			deployable := asset.NewLinkTokenDeployable()
+
+			addr, err := deployable.Deploy(cmd.Context(), deployer)
+			if err != nil {
+				return err
+			}
+
+			viper.Set("link_contract_address", addr)
+		case domain.LinkEthFeed:
+			deployable := asset.NewLinkETHFeedDeployable(&asset.LinkETHFeedConfig{
+				Answer: 2e18,
+			})
+
+			addr, err := deployable.Deploy(cmd.Context(), deployer)
+			if err != nil {
+				return err
+			}
+
+			viper.Set("link_eth_feed", addr)
 		}
 
 		return nil
