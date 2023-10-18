@@ -1,4 +1,4 @@
-package interact
+package registry
 
 import (
 	"context"
@@ -12,12 +12,10 @@ import (
 	"github.com/easterthebunny/automation-cli/internal/node"
 )
 
-var registryCmd = &cobra.Command{
-	Use:       "registry [ACTION]",
-	Short:     "Run pre-defined actions for contract",
-	Long:      `Interact with the registry and run pre-packaged actions. This is not inclusive of all commands possible to run`,
-	Args:      cobra.ExactArgs(1),
-	ValidArgs: []string{"set-config"},
+var setConfigCmd = &cobra.Command{
+	Use:   "set-config",
+	Short: "Set the configuration for the registry",
+	Long:  `Set the configuration for the registry including on-chain config and off-chain config.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		conf := cmdContext.GetConfigFromContext(cmd.Context())
 		if conf == nil {
@@ -26,22 +24,21 @@ var registryCmd = &cobra.Command{
 
 		dConfig := config.GetDeployerConfig(conf)
 
-		paths := cmdContext.GetPathsFromContext(cmd.Context())
-		if paths == nil {
-			return fmt.Errorf("missing config path in context")
-		}
-
 		keyConf := cmdContext.GetKeyConfigFromContext(cmd.Context())
 		if keyConf == nil {
 			return fmt.Errorf("missing private key config")
 		}
 
-		for _, key := range keyConf.Keys {
-			if key.Alias == dConfig.PrivateKey {
-				dConfig.PrivateKey = key.Value
+		pkOverride, err := cmd.Flags().GetString("key")
+		if err != nil {
+			return err
+		}
 
-				break
-			}
+		dConfig = config.SetPrivateKey(dConfig, keyConf, pkOverride)
+
+		paths := cmdContext.GetPathsFromContext(cmd.Context())
+		if paths == nil {
+			return fmt.Errorf("missing config path in context")
 		}
 
 		deployer, err := asset.NewDeployer(&dConfig)
@@ -49,11 +46,8 @@ var registryCmd = &cobra.Command{
 			return err
 		}
 
-		switch args[0] {
-		case "set-config":
-			if err := setConfig(cmd.Context(), conf, deployer, paths.Environment); err != nil {
-				return err
-			}
+		if err := setConfig(cmd.Context(), conf, deployer, paths.Environment); err != nil {
+			return err
 		}
 
 		return nil
@@ -62,7 +56,7 @@ var registryCmd = &cobra.Command{
 
 func setConfig(ctx context.Context, conf *config.Config, deployer *asset.Deployer, env string) error {
 	interactable := asset.NewRegistryV21Deployable(&asset.RegistryV21Config{
-		Mode:            config.GetRegistryMode(conf),
+		Mode:            config.GetRegistryMode(conf.ServiceContract.Mode),
 		LinkTokenAddr:   conf.LinkContract,
 		LinkETHFeedAddr: conf.LinkETHFeed,
 		FastGasFeedAddr: conf.FastGasFeed,

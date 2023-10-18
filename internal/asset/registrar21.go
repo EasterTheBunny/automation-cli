@@ -37,7 +37,6 @@ func (d *RegistrarV21Deployable) Connect(
 func (d *RegistrarV21Deployable) Deploy(
 	ctx context.Context,
 	deployer *Deployer,
-	config VerifyContractConfig,
 ) (common.Address, error) {
 	var contractAddr common.Address
 

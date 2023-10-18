@@ -103,25 +103,25 @@ func (d *RegistryV21Deployable) Connect(ctx context.Context, addr string, deploy
 	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
 }
 
-func (d *RegistryV21Deployable) Deploy(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *RegistryV21Deployable) Deploy(ctx context.Context, deployer *Deployer) (common.Address, error) {
 	var registryAddr common.Address
 
-	automationForwarderLogicAddr, err := d.deployForwarder(ctx, deployer, config)
+	automationForwarderLogicAddr, err := d.deployForwarder(ctx, deployer)
 	if err != nil {
 		return registryAddr, err
 	}
 
-	registryLogicBAddr, err := d.deployLogicB(ctx, automationForwarderLogicAddr, deployer, config)
+	registryLogicBAddr, err := d.deployLogicB(ctx, automationForwarderLogicAddr, deployer)
 	if err != nil {
 		return registryAddr, err
 	}
 
-	registryLogicAAddr, err := d.deployLogicA(ctx, registryLogicBAddr, deployer, config)
+	registryLogicAAddr, err := d.deployLogicA(ctx, registryLogicBAddr, deployer)
 	if err != nil {
 		return registryAddr, err
 	}
 
-	registryAddr, err = d.deployRegistry(ctx, registryLogicAAddr, deployer, config)
+	registryAddr, err = d.deployRegistry(ctx, registryLogicAAddr, deployer)
 	if err != nil {
 		return registryAddr, err
 	}
@@ -293,7 +293,7 @@ func (d *RegistryV21Deployable) connectToInterface(
 	return addr, nil
 }
 
-func (d *RegistryV21Deployable) deployForwarder(ctx context.Context, deployer *Deployer, config VerifyContractConfig) (common.Address, error) {
+func (d *RegistryV21Deployable) deployForwarder(ctx context.Context, deployer *Deployer) (common.Address, error) {
 	var logicAddr common.Address
 
 	opts, err := deployer.BuildTxOpts(ctx)
@@ -319,7 +319,6 @@ func (d *RegistryV21Deployable) deployLogicB(
 	ctx context.Context,
 	forwarderAddr common.Address,
 	deployer *Deployer,
-	config VerifyContractConfig,
 ) (common.Address, error) {
 	var logicAddr common.Address
 
@@ -365,7 +364,6 @@ func (d *RegistryV21Deployable) deployLogicA(
 	ctx context.Context,
 	logicBAddr common.Address,
 	deployer *Deployer,
-	config VerifyContractConfig,
 ) (common.Address, error) {
 	var logicAddr common.Address
 
@@ -397,7 +395,6 @@ func (d *RegistryV21Deployable) deployRegistry(
 	ctx context.Context,
 	logicAAddr common.Address,
 	deployer *Deployer,
-	config VerifyContractConfig,
 ) (common.Address, error) {
 	var registryAddr common.Address
 

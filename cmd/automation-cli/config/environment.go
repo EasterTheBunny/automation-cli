@@ -44,8 +44,24 @@ func GetDeployerConfig(config *Config) asset.DeployerConfig {
 	}
 }
 
-func GetRegistryMode(config *Config) uint8 {
-	switch config.ServiceContract.Mode {
+func SetPrivateKey(config asset.DeployerConfig, keyConfig *PrivateKeyConfig, alias string) asset.DeployerConfig {
+	if alias != "" {
+		config.PrivateKey = alias
+	}
+
+	for _, key := range keyConfig.Keys {
+		if key.Alias == config.PrivateKey {
+			config.PrivateKey = key.Value
+
+			break
+		}
+	}
+
+	return config
+}
+
+func GetRegistryMode(mode string) uint8 {
+	switch mode {
 	case "ARBITRUM":
 		return 1
 	case "OPTIMISM":

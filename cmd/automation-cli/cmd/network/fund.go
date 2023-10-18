@@ -2,15 +2,13 @@ package network
 
 import (
 	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/config"
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/context"
 	"github.com/easterthebunny/automation-cli/internal/asset"
+	"github.com/easterthebunny/automation-cli/internal/util"
 )
 
 var fundCmd = &cobra.Command{
@@ -72,39 +70,9 @@ var fundCmd = &cobra.Command{
 
 		addr := nConf.Address
 
-		var amount uint64
-
-		allDigits := regexp.MustCompile(`^[0-9]+$`)
-		usesExp := regexp.MustCompile(`^[0-9]+\^[0-9]+$`)
-		strAmount := strings.TrimSpace(args[1])
-
-		if allDigits.MatchString(strAmount) {
-			amount, err = strconv.ParseUint(strAmount, 10, 64)
-			if err != nil {
-				return err
-			}
-		} else if usesExp.MatchString(strAmount) {
-			parts := strings.Split(strAmount, "^")
-
-			zeros, err := strconv.ParseInt(parts[1], 10, 64)
-			if err != nil {
-				return err
-			}
-
-			var strVal strings.Builder
-
-			strVal.WriteString(parts[0])
-
-			for x := 0; x < int(zeros); x++ {
-				strVal.WriteString("0")
-			}
-
-			amount, err = strconv.ParseUint(strVal.String(), 10, 64)
-			if err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("not a valid amount")
+		amount, err := util.ParseExp(args[1])
+		if err != nil {
+			return err
 		}
 
 		return deployer.Send(cmd.Context(), addr, amount)

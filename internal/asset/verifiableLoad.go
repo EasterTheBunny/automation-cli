@@ -90,7 +90,6 @@ func (d *VerifiableLoadLogTriggerDeployable) Connect(
 func (d *VerifiableLoadLogTriggerDeployable) Deploy(
 	ctx context.Context,
 	deployer *Deployer,
-	_ VerifyContractConfig,
 ) (common.Address, error) {
 	var contractAddr common.Address
 
@@ -268,7 +267,6 @@ func (d *VerifiableLoadConditionalDeployable) Connect(
 func (d *VerifiableLoadConditionalDeployable) Deploy(
 	ctx context.Context,
 	deployer *Deployer,
-	config VerifyContractConfig,
 ) (common.Address, error) {
 	var contractAddr common.Address
 

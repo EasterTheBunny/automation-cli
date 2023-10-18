@@ -5,7 +5,7 @@ ENVIRONMENT="default"
 KEY="default"
 KEYPREFIX="default"
 COUNT=4 # creates 4 participant nodes
-AMOUNT="10^17" # on the ETH network this is 0.1 ETH
+AMOUNT="10e17" # on the ETH network this is 0.1 ETH
 CREATE_ADDRESS=true
 FUND_ADDRESS=true
 
