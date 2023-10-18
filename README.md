@@ -38,8 +38,24 @@ alias references to private keys. To add a private key run the following, but be
 per network, they are globally available:
 
 ```
-$ automation-cli config pk-store [ALIAS]
+$ automation-cli key store [ALIAS]
 ```
+
+If you don't have a private key available and wish to create and store a new one, run the following:
+
+```
+$ automation-cli key create [ALIAS]
+```
+
+Any of the above keys can be funded after they are included as private keys on a participant node. You can fund a
+participant node (private key address) by the following:
+
+```
+$ automation-cli network fund local.mumbai-participant-2 10^17
+```
+
+This will fund the node's address with 10^17 native token from the default private key or add `--key="some.other.key"`
+as an alternative source.
 
 ### Setup Environment
 Environments need a few values to get started such as chain id, private keys, and RPC urls. Run the following to set up

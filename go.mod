@@ -1,6 +1,6 @@
 module github.com/easterthebunny/automation-cli
 
-go 1.20
+go 1.21
 
 require (
 	github.com/docker/docker v24.0.6+incompatible

@@ -65,6 +65,7 @@ type VerifiableLoadInteractionConfig struct {
 	RegisterUpkeepCount      uint8
 	RegisteredUpkeepInterval uint32
 	CancelBeforeRegister     bool
+	SendLINKBeforeRegister   bool
 }
 
 type VerifiableLoadLogTriggerDeployable struct {
@@ -173,6 +174,15 @@ func (d *VerifiableLoadLogTriggerDeployable) RegisterUpkeeps(
 	if conf.CancelBeforeRegister {
 		if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
+		}
+	}
+
+	if conf.SendLINKBeforeRegister {
+		// send the exact amount of LINK to the contract to run all deployed upkeeps
+		amount := uint64(conf.RegisterUpkeepCount) * DefaultRegisterAmount
+
+		if err := deployer.SendLINK(ctx, conf.ContractAddr, amount); err != nil {
+			return err
 		}
 	}
 
@@ -352,6 +362,15 @@ func (d *VerifiableLoadConditionalDeployable) RegisterUpkeeps(
 	if conf.CancelBeforeRegister {
 		if err := cancelAllUpkeeps(ctx, contract, deployer); err != nil {
 			return fmt.Errorf("%w: failed to cancel upkeeps: %s", ErrContractConnection, err.Error())
+		}
+	}
+
+	if conf.SendLINKBeforeRegister {
+		// send the exact amount of LINK to the contract to run all deployed upkeeps
+		amount := uint64(conf.RegisterUpkeepCount) * DefaultRegisterAmount
+
+		if err := deployer.SendLINK(ctx, conf.ContractAddr, amount); err != nil {
+			return err
 		}
 	}
 

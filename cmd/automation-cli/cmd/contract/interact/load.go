@@ -12,11 +12,17 @@ import (
 )
 
 var (
-	cancelUpkeeps bool
+	cancelUpkeeps  bool
+	sendLINK       bool
+	upkeepCount    uint8
+	upkeepInterval uint32
 )
 
 func init() {
 	loadCmd.Flags().BoolVar(&cancelUpkeeps, "cancel-upkeeps", false, "cancel upkeeps before creating new ones")
+	loadCmd.Flags().BoolVar(&sendLINK, "send-link", false, "send LINK to the contract before creating upkeeps")
+	loadCmd.Flags().Uint8Var(&upkeepCount, "count", 5, "number of upkeeps to register")
+	loadCmd.Flags().Uint32Var(&upkeepInterval, "interval", 15, "eligibility interval for conditional upkeeps")
 }
 
 var loadCmd = &cobra.Command{
@@ -44,7 +50,13 @@ $ automation-cli contract interact verifiable-load log-trigger cancel-upkeeps --
 With the default environment and the same private key, leave off the "environment" and "key" parameters:
 
 $ automation-cli contract interact verifiable-load log-trigger register-upkeeps --cancel-upkeeps
-$ automation-cli contract interact verifiable-load log-trigger get-stats`,
+$ automation-cli contract interact verifiable-load log-trigger get-stats
+
+In many cases you will want to send LINK to the contract in the process of registering upkeeps. By default, the
+upkeep register function will NOT send LINK and will rely on the contract already having LINK available. To send LINK
+as part of the registration process, use the --send-link argument as follows:
+
+$ automation-cli contract interact verifiable-load log-trigger register-upkeeps --send-link`,
 	Args: cobra.ExactArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -99,9 +111,10 @@ $ automation-cli contract interact verifiable-load log-trigger get-stats`,
 
 		vlic := asset.VerifiableLoadInteractionConfig{
 			ContractAddr:             conf.LogTriggerLoadContract.ContractAddress,
-			RegisterUpkeepCount:      5,
-			RegisteredUpkeepInterval: 15,
+			RegisterUpkeepCount:      upkeepCount,
+			RegisteredUpkeepInterval: upkeepInterval,
 			CancelBeforeRegister:     cancelUpkeeps,
+			SendLINKBeforeRegister:   sendLINK,
 		}
 
 		switch args[1] {

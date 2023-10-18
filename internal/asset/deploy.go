@@ -155,6 +155,50 @@ func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error
 	return d.wait(ctx, signedTx)
 }
 
+func (d *Deployer) SendLINK(ctx context.Context, toAddr string, amount uint64) error {
+	if amount == 0 {
+		return nil
+	}
+
+	opts, err := d.BuildTxOpts(ctx)
+	if err != nil {
+		return err
+	}
+
+	trx, err := d.linkToken.Transfer(opts, common.HexToAddress(toAddr), new(big.Int).SetUint64(amount))
+	if err != nil {
+		return err
+	}
+
+	if err := d.wait(ctx, trx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *Deployer) ApproveLINK(ctx context.Context, toAddr string, amount uint64) error {
+	if amount == 0 {
+		return nil
+	}
+
+	opts, err := d.BuildTxOpts(ctx)
+	if err != nil {
+		return err
+	}
+
+	trx, err := d.linkToken.Approve(opts, common.HexToAddress(toAddr), new(big.Int).SetUint64(amount))
+	if err != nil {
+		return err
+	}
+
+	if err := d.wait(ctx, trx); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
 	fmt.Println("waiting for transaction to be mined: ", trx.Hash())
 

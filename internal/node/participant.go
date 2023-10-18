@@ -12,13 +12,14 @@ type OCR2NodeConfig struct {
 	P2PKeyID          string
 }
 
-func CreatParticipantNode(
+func CreateParticipantNode(
 	ctx context.Context,
 	conf NodeConfig,
 	port uint16,
 	groupname, name, image string,
 	contract, bootstrap, basePath string,
 	privateKey *string,
+	reset bool,
 ) (*ChainlinkNode, error) {
 	extraTOML := "[P2P]\n[P2P.V2]\nListenAddresses = [\"0.0.0.0:8000\"]"
 
@@ -27,7 +28,7 @@ func CreatParticipantNode(
 	clNode, err := buildChainlinkNode(
 		ctx, io.Discard, conf,
 		port, groupname, name, image,
-		extraTOML, basePath, false,
+		extraTOML, basePath, reset,
 	)
 	if err != nil {
 		return nil, err
