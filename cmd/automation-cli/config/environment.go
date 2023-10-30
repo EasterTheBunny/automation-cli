@@ -33,6 +33,10 @@ func GetConfig(path string) (*Config, error) {
 	return conf, nil
 }
 
+func DeleteConfig(path string) error {
+	return removeDir(path)
+}
+
 func GetDeployerConfig(config *Config) asset.DeployerConfig {
 	return asset.DeployerConfig{
 		RPCURL:       config.RPCHTTPURL,
@@ -50,6 +54,7 @@ func SetPrivateKey(config asset.DeployerConfig, keyConfig *PrivateKeyConfig, ali
 	}
 
 	for _, key := range keyConfig.Keys {
+
 		if key.Alias == config.PrivateKey {
 			config.PrivateKey = key.Value
 

@@ -54,7 +54,7 @@ func GetAssetOCRConfig(conf *Config) asset.OCR3NetworkConfig {
 }
 
 type OCR3NetworkConfig struct {
-	DeltaProgress                           time.Duration `mapstructure:"delta_pogress"`
+	DeltaProgress                           time.Duration `mapstructure:"delta_progress"`
 	DeltaResend                             time.Duration `mapstructure:"delta_resend"`
 	DeltaInitial                            time.Duration `mapstructure:"delta_initial"`
 	DeltaRound                              time.Duration `mapstructure:"delta_round"`

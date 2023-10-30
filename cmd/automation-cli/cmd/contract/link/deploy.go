@@ -16,7 +16,8 @@ func init() {
 }
 
 var (
-	answer string
+	answer   string
+	feedType string
 
 	deployTokenCmd = &cobra.Command{
 		Use:   "deploy-token",
@@ -61,10 +62,11 @@ var (
 	}
 
 	deployFeedCmd = &cobra.Command{
-		Use:   "deploy-feed",
-		Short: "Create new mock LINK-ETH feed contract",
-		Long:  `Create new mock LINK-ETH feed contract. The resulting contract always returns the configured amount.`,
-		RunE: func(cmd *cobra.Command, _ []string) error {
+		Use:   "deploy-feed [TYPE]",
+		Short: "Create new mock LINK-ETH or fast gas feed contracts",
+		Long:  `Create new mock LINK-ETH or fast gas feed contract. The resulting contract always returns the configured amount.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
 			conf := context.GetConfigFromContext(cmd.Context())
 			if conf == nil {
 				return fmt.Errorf("missing config path in context")
@@ -94,16 +96,32 @@ var (
 				return err
 			}
 
-			deployable := asset.NewLinkETHFeedDeployable(&asset.LinkETHFeedConfig{
-				Answer: amount,
-			})
+			switch args[0] {
+			case "link-eth":
+				deployable := asset.NewLinkETHFeedDeployable(&asset.LinkETHFeedConfig{
+					Answer: amount,
+				})
 
-			addr, err := deployable.Deploy(cmd.Context(), deployer)
-			if err != nil {
-				return err
+				addr, err := deployable.Deploy(cmd.Context(), deployer)
+				if err != nil {
+					return err
+				}
+
+				viper.Set("link_eth_feed", addr)
+			case "fast-gas":
+				deployable := asset.NewFastGasFeedDeployable(&asset.FeedConfig{
+					Answer: amount,
+				})
+
+				addr, err := deployable.Deploy(cmd.Context(), deployer)
+				if err != nil {
+					return err
+				}
+
+				viper.Set("fast_gas_feed", addr)
+			default:
+				return fmt.Errorf("unknown feed type")
 			}
-
-			viper.Set("link_eth_feed", addr)
 
 			return nil
 		},

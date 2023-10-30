@@ -22,7 +22,7 @@ var (
 		Example: `To add nodes, a bootstrap node will need to first exist. Then run the following to create 5 nodes in
 the same environment as above:
 
-$ automation-cli network participant reset 0 chainlink:latest --count=5 --environment="non.default"
+$ automation-cli network participant reset 0 chainlink:latest --log-level="debug" --environment="non.default"
 
 A log level can be specified to reduce or increase the log output of individual nodes in the case that only one node is
 being evaluated and the others only exist to create the network. Creating this type of network can be done with the

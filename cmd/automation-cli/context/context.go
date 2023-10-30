@@ -91,6 +91,10 @@ func AttachConfig(ctx context.Context, conf config.Config) context.Context {
 	return context.WithValue(ctx, ctxConfigKey, conf)
 }
 
+func RemoveConfig(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxConfigKey, nil)
+}
+
 func GetConfigFromContext(ctx context.Context) *config.Config {
 	val := ctx.Value(ctxConfigKey)
 	if val == nil {

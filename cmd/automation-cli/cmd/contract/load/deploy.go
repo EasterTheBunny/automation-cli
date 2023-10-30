@@ -39,7 +39,7 @@ var (
 
 			deployer, err := asset.NewDeployer(&dConfig)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create deployer: %s", err.Error())
 			}
 
 			switch upkeepType {
@@ -56,7 +56,7 @@ var (
 
 				addr, err := deployable.Deploy(cmd.Context(), deployer)
 				if err != nil {
-					return err
+					return fmt.Errorf("deployment failed: %s", err.Error())
 				}
 
 				viper.Set("log_trigger_load_contract.contract_address", addr)

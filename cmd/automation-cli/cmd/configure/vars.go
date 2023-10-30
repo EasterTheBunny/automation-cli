@@ -29,11 +29,11 @@ var configGetVarCmd = &cobra.Command{
 
 		switch val.(type) {
 		case string:
-			fmt.Fprintf(cmd.OutOrStdout(), "%s", val)
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", val)
 		case uint, uint8, uint16, uint32, uint64, int, int32, int64:
-			fmt.Fprintf(cmd.OutOrStdout(), "%d", val)
+			fmt.Fprintf(cmd.OutOrStdout(), "%d\n", val)
 		case bool:
-			fmt.Fprintf(cmd.OutOrStdout(), "%t", val)
+			fmt.Fprintf(cmd.OutOrStdout(), "%t\n", val)
 		}
 
 		return nil

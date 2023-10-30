@@ -25,8 +25,8 @@ var (
 - register new upkeeps
 - collect and print delay statistics to console
 
-$ automation-cli contract verifiable-load register-upkeeps --type="log-trigger" --environment="non.default" --key="mumbai-dev" --cancel-upkeeps
-$ automation-cli contract verifiable-load get-stats --type="log-trigger" --environment="non.default" --key="mumbai-dev"
+$ automation-cli contract verifiable-load register-upkeeps --type="log-trigger" --environment="non.default" --key="mumbai-dev" --cancel-upkeeps --send-link
+$ automation-cli contract verifiable-load get-stats --type="log-trigger" --environment="non.default"
 
 The above example assumes an environment set up with the name "non.default" and a verifiable load log trigger contract
 deployed to that environment. Also, a key with the name "mumbai-dev" is used. The first command cancels all existing

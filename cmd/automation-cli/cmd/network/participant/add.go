@@ -13,10 +13,18 @@ import (
 
 func init() {
 	addCmd.Flags().Uint8Var(&count, "count", 1, "total number of nodes to create with this configuration")
+	addCmd.Flags().StringVar(&mercuryLegacyURL, "mercury-legacy-url", "https://chain2.old.link", "legacy url to the mercury server")
+	addCmd.Flags().StringVar(&mercuryURL, "mercury-url", "https://chain2.link", "url to the mercury server")
+	addCmd.Flags().StringVar(&mercuryID, "mercury-id", "username2", "mercury user id")
+	addCmd.Flags().StringVar(&mercuryKey, "mercury-key", "password2", "mercury user key")
 }
 
 var (
-	count uint8
+	count            uint8
+	mercuryLegacyURL string
+	mercuryURL       string
+	mercuryID        string
+	mercuryKey       string
 
 	addCmd = &cobra.Command{
 		Use:   "add [IMAGE]",
@@ -77,6 +85,16 @@ This assumes the four provided keys are aliases to existing saved keys.`,
 			}
 
 			existing := len(conf.Nodes)
+			nodeConf := node.NodeConfig{
+				ChainID:          conf.ChainID,
+				NodeWSSURL:       conf.RPCWSSURL,
+				NodeHttpURL:      conf.RPCHTTPURL,
+				LogLevel:         logLevel,
+				MercuryLegacyURL: mercuryLegacyURL,
+				MercuryURL:       mercuryURL,
+				MercuryID:        mercuryID,
+				MercuryKey:       mercuryKey,
+			}
 
 			for idx := 0; idx < int(count); idx++ {
 				nodeID := idx + existing
@@ -90,16 +108,7 @@ This assumes the four provided keys are aliases to existing saved keys.`,
 
 				clNode, err := node.CreateParticipantNode(
 					cmd.Context(),
-					node.NodeConfig{
-						ChainID:          conf.ChainID,
-						NodeWSSURL:       conf.RPCWSSURL,
-						NodeHttpURL:      conf.RPCHTTPURL,
-						LogLevel:         logLevel,
-						MercuryLegacyURL: "https://chain2.old.link",
-						MercuryURL:       "https://chain2.link",
-						MercuryID:        "username2",
-						MercuryKey:       "password2",
-					},
+					nodeConf,
 					uint16(6688+nodeID),
 					conf.Groupname,
 					nodeName,

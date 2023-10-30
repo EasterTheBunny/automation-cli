@@ -5,12 +5,16 @@ import "github.com/spf13/cobra"
 func init() {
 	RootCmd.AddCommand(addCmd)
 	RootCmd.AddCommand(resetCmd)
+	RootCmd.AddCommand(removeCmd)
 
 	RootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "error", "set the log level for the node")
+
+	removeCmd.Flags().BoolVar(&removeAll, "all", false, "remove all participants")
 }
 
 var (
-	logLevel string
+	logLevel  string
+	removeAll bool
 
 	RootCmd = &cobra.Command{
 		Use:   "participant [ACTION]",

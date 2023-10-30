@@ -19,8 +19,7 @@ var (
 environment named 'non.default'.
 
 $ automation-cli network bootstrap set chainlink:latest --environment="non.default"`,
-		ValidArgs: []string{"bootstrap", "participant"},
-		Args:      cobra.MinimumNArgs(2),
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			conf := context.GetConfigFromContext(cmd.Context())
 			if conf == nil {
@@ -42,7 +41,7 @@ $ automation-cli network bootstrap set chainlink:latest --environment="non.defau
 				MercuryURL:       "https://chain2.link",
 				MercuryID:        "username2",
 				MercuryKey:       "password2",
-			}, conf.Groupname, args[1], conf.ServiceContract.RegistryAddress, 5688, 8000, nodeConfigPath, true)
+			}, conf.Groupname, args[0], conf.ServiceContract.RegistryAddress, 5688, 8000, nodeConfigPath, true)
 			if err != nil {
 				return err
 			}

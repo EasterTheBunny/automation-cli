@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	"github.com/easterthebunny/automation-cli/cmd/automation-cli/cmd/configure"
@@ -81,11 +79,13 @@ var rootCmd = &cobra.Command{
 	},
 	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
 		paths := context.GetPathsFromContext(cmd.Context())
-		if paths == nil {
-			return fmt.Errorf("missing config path in context")
+		if paths != nil {
+			if conf := context.GetConfigFromContext(cmd.Context()); conf != nil {
+				return config.SaveConfig(paths.Environment)
+			}
 		}
 
-		return config.SaveConfig(paths.Environment)
+		return nil
 	},
 }
 

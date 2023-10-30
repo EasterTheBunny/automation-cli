@@ -14,7 +14,6 @@ func init() {
 	RootCmd.AddCommand(load.RootCmd)
 	RootCmd.AddCommand(registrar.RootCmd)
 	RootCmd.AddCommand(registry.RootCmd)
-
 }
 
 var RootCmd = &cobra.Command{

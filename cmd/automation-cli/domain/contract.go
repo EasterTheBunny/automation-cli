@@ -3,8 +3,8 @@ package domain
 const (
 	Registrar                 = "registrar"
 	Registry                  = "registry"
-	VerifiableLoadLogTrigger  = "verifiable-load-log-trigger"
-	VerifiableLoadConditional = "verifiable-load-conditional"
+	VerifiableLoadLogTrigger  = "log-trigger"
+	VerifiableLoadConditional = "conditional"
 	LinkToken                 = "link-token"
 	LinkEthFeed               = "link-eth-feed"
 )

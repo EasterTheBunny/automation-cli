@@ -6,6 +6,8 @@ func init() {
 	RootCmd.AddCommand(storeCmd)
 	RootCmd.AddCommand(createCmd)
 	RootCmd.AddCommand(listCmd)
+	RootCmd.AddCommand(deleteCmd)
+	RootCmd.AddCommand(importGanacheCmd)
 }
 
 var RootCmd = &cobra.Command{

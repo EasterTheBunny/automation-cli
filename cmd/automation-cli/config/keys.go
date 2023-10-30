@@ -12,8 +12,9 @@ type PrivateKeyConfig struct {
 }
 
 type Key struct {
-	Alias string `json:"alias"`
-	Value string `json:"value"`
+	Alias   string `json:"alias"`
+	Value   string `json:"value"`
+	Address string `json:"address"`
 }
 
 func GetPrivateKeyConfig(path string) (*PrivateKeyConfig, error) {

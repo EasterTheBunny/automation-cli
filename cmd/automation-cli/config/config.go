@@ -36,6 +36,10 @@ func ensureExists(path, filename string) (string, error) {
 	return configPath, nil
 }
 
+func removeDir(path string) error {
+	return os.RemoveAll(path)
+}
+
 func readConfig[T any](vpr *viper.Viper, path string) (*T, error) {
 	if err := vpr.ReadInConfig(); err != nil {
 		if errors.As(err, &viper.ConfigFileNotFoundError{}) {
