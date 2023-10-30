@@ -6,29 +6,29 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/mock_ethlink_aggregator_wrapper"
+	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/mock_gas_aggregator_wrapper"
 )
 
-type LinkETHFeedConfig struct {
+type FeedConfig struct {
 	Answer uint64
 }
 
-type LinkETHFeedDeployable struct {
-	contract *mock_ethlink_aggregator_wrapper.MockETHLINKAggregator
-	config   *LinkETHFeedConfig
+type FastGasFeedDeployable struct {
+	contract *mock_gas_aggregator_wrapper.MockGASAggregator
+	config   *FeedConfig
 }
 
-func NewLinkETHFeedDeployable(config *LinkETHFeedConfig) *LinkETHFeedDeployable {
-	return &LinkETHFeedDeployable{
+func NewFastGasFeedDeployable(config *FeedConfig) *FastGasFeedDeployable {
+	return &FastGasFeedDeployable{
 		config: config,
 	}
 }
 
-func (d *LinkETHFeedDeployable) Connect(_ context.Context, addr string, deployer *Deployer) (common.Address, error) {
+func (d *FastGasFeedDeployable) Connect(_ context.Context, addr string, deployer *Deployer) (common.Address, error) {
 	return d.connectToInterface(common.HexToAddress(addr), deployer)
 }
 
-func (d *LinkETHFeedDeployable) Deploy(
+func (d *FastGasFeedDeployable) Deploy(
 	ctx context.Context,
 	deployer *Deployer,
 ) (common.Address, error) {
@@ -39,13 +39,13 @@ func (d *LinkETHFeedDeployable) Deploy(
 		return contractAddr, fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
 	}
 
-	contractAddr, trx, _, err := mock_ethlink_aggregator_wrapper.DeployMockETHLINKAggregator(
+	contractAddr, trx, _, err := mock_gas_aggregator_wrapper.DeployMockGASAggregator(
 		opts,
 		deployer.Client,
 		new(big.Int).SetUint64(d.config.Answer),
 	)
 	if err != nil {
-		return contractAddr, fmt.Errorf("%w: LINK native feed creation failed: %s", ErrContractCreate, err.Error())
+		return contractAddr, fmt.Errorf("%w: fast gas feed creation failed: %s", ErrContractCreate, err.Error())
 	}
 
 	if err := deployer.waitDeployment(ctx, trx); err != nil {
@@ -55,11 +55,11 @@ func (d *LinkETHFeedDeployable) Deploy(
 	return contractAddr, nil
 }
 
-func (d *LinkETHFeedDeployable) connectToInterface(
+func (d *FastGasFeedDeployable) connectToInterface(
 	addr common.Address,
 	deployer *Deployer,
 ) (common.Address, error) {
-	contract, err := mock_ethlink_aggregator_wrapper.NewMockETHLINKAggregator(
+	contract, err := mock_gas_aggregator_wrapper.NewMockGASAggregator(
 		addr,
 		deployer.Client,
 	)

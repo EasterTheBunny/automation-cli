@@ -27,8 +27,15 @@ func CreateParticipantNode(
 
 	clNode, err := buildChainlinkNode(
 		ctx, io.Discard, conf,
-		port, groupname, name, image,
-		extraTOML, basePath, reset,
+		dockerNodeConfig{
+			Port:          port,
+			Group:         groupname,
+			ContainerName: name,
+			Image:         image,
+			ExtraTOML:     extraTOML,
+			BasePath:      basePath,
+			Reset:         reset,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -98,4 +105,20 @@ func GetParticipantInfo(
 		OnchainPublicKey:  ocr2Conf.Attributes.OnchainPublicKey,
 		P2PKeyID:          keyID,
 	}, nil
+}
+
+func RemoveParticipantNode(
+	ctx context.Context,
+	port uint16,
+	groupname, name, image string,
+) error {
+	return removeChainlinkNode(
+		ctx,
+		dockerNodeConfig{
+			Port:          port,
+			Group:         groupname,
+			ContainerName: name,
+			Image:         image,
+		},
+	)
 }

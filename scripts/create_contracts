@@ -3,18 +3,18 @@
 ENVIRONMENT="default"
 KEY="default"
 
-automation-cli contract link-token deploy --environment=${ENVIRONMENT} --key=${KEY}
+automation-cli contract link deploy-token --environment=${ENVIRONMENT} --key=${KEY}
 echo "link token address: "
-automation-cli config get link_contract_address --environment=${ENVIRONMENT}
+automation-cli configure get link_contract_address --environment=${ENVIRONMENT}
 
-automation-cli contract link-eth-feed deploy --environment=${ENVIRONMENT} --key=${KEY}
+automation-cli contract link deploy-feed --environment=${ENVIRONMENT} --key=${KEY}
 echo "link eth feed address: "
-automation-cli config get link_eth_feed --environment=${ENVIRONMENT}
+automation-cli configure get link_eth_feed --environment=${ENVIRONMENT}
 
 automation-cli contract registry deploy --environment=${ENVIRONMENT} --key=${KEY}
 echo "registry address: "
-automation-cli config get service_contract.registry_address --environment=${ENVIRONMENT}
+automation-cli configure get service_contract.registry_address --environment=${ENVIRONMENT}
 
 automation-cli contract registrar deploy --environment=${ENVIRONMENT} --key=${KEY}
 echo "registrar address: "
-automation-cli config get service_contract.registrar_address --environment=${ENVIRONMENT}
+automation-cli configure get service_contract.registrar_address --environment=${ENVIRONMENT}

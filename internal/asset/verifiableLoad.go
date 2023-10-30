@@ -678,7 +678,16 @@ func cancelAllUpkeeps(ctx context.Context, canceller upkeepCanceller, deployer *
 		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
 	}
 
-	trx, err := canceller.BatchCancelUpkeeps(nil, oldUpkeepIds)
+	if len(oldUpkeepIds) == 0 {
+		return nil
+	}
+
+	opts, err := deployer.BuildTxOpts(ctx)
+	if err != nil {
+		return err
+	}
+
+	trx, err := canceller.BatchCancelUpkeeps(opts, oldUpkeepIds)
 	if err != nil {
 		return fmt.Errorf("%w: contract query failed: %s", ErrContractConnection, err.Error())
 	}

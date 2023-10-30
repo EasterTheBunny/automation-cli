@@ -49,9 +49,22 @@ func (d *RegistrarV21Deployable) Deploy(
 	linkAddr := common.HexToAddress(d.cCfg.LinkTokenAddr)
 	minLink := big.NewInt(d.cCfg.MinLink)
 
+	configs := []registrar.AutomationRegistrar21InitialTriggerConfig{
+		{
+			TriggerType:           0,
+			AutoApproveType:       2,
+			AutoApproveMaxAllowed: 1_000,
+		},
+		{
+			TriggerType:           1,
+			AutoApproveType:       2,
+			AutoApproveMaxAllowed: 1_000,
+		},
+	}
+
 	contractAddr, trx, _, err := registrar.DeployAutomationRegistrar(
 		opts, deployer.Client,
-		linkAddr, registry, minLink, nil,
+		linkAddr, registry, minLink, configs,
 	)
 	if err != nil {
 		return contractAddr, fmt.Errorf("%w: AutomationForwarderLogic creation failed: %s", ErrContractCreate, err.Error())

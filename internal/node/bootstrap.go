@@ -36,8 +36,15 @@ func CreateBootstrapNode(
 
 	node, err := buildChainlinkNode(
 		ctx, io.Discard, conf,
-		uint16(uiPort), groupname, containerName, image,
-		fmt.Sprintf(bootstrapTOML, strconv.Itoa(p2pv2Port)), path, reset,
+		dockerNodeConfig{
+			Port:          uint16(uiPort),
+			Group:         groupname,
+			ContainerName: containerName,
+			Image:         image,
+			ExtraTOML:     fmt.Sprintf(bootstrapTOML, strconv.Itoa(p2pv2Port)),
+			BasePath:      path,
+			Reset:         reset,
+		},
 	)
 	if err != nil {
 		return "", err
@@ -59,7 +66,7 @@ func CreateBootstrapNode(
 		return "", err
 	}
 
-	tcpAddr := fmt.Sprintf("%s@%s:%d", p2pKeyID, containerName, p2pv2Port)
+	tcpAddr := fmt.Sprintf("%s@%s-%s:%d", p2pKeyID, groupname, containerName, p2pv2Port)
 
 	return tcpAddr, nil
 }

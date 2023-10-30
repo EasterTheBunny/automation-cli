@@ -8,8 +8,9 @@ COUNT=4 # creates 4 participant nodes
 AMOUNT="10e17" # on the ETH network this is 0.1 ETH
 CREATE_ADDRESS=true
 FUND_ADDRESS=true
+SET_CONFIG=true
 
-automation-cli network bootstrap add ${IMAGE} --environment=${ENVIRONMENT}
+automation-cli network bootstrap set ${IMAGE} --environment=${ENVIRONMENT}
 
 for (( i=1 ; i<=${COUNT} ; i++ )); 
 do
@@ -29,3 +30,7 @@ done
 echo "node participants:"
 
 automation-cli network list --environment=${ENVIRONMENT}
+
+if [ "${SET_CONFIG}" = true ] ; then
+    automation-cli contract registry set-config --environment=${ENVIRONMENT}
+fi

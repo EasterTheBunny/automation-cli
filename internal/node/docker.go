@@ -19,6 +19,7 @@ import (
 
 const (
 	DefaultPostgresImage = "postgres:latest"
+	postgresPortNumber   = 5432
 )
 
 var (
@@ -33,17 +34,30 @@ type nodeContainer struct {
 	id      string
 }
 
+type dockerNodeConfig struct {
+	// Port is the external TCP for the node to listen on
+	Port uint16
+	// Group is the naming prefix applied to docker containers
+	Group string
+	// ContainerName is the name of a specific container without the group prefix
+	ContainerName string
+	// Image is the chainlink docker image for the container
+	Image string
+	// ExtraTOML is a configuration applied at command input
+	ExtraTOML string
+	// BasePath is the file system path where secrets will be created and referenced by a running node
+	BasePath string
+	// Reset will stop an existing container set before recreating a new one
+	Reset bool
+}
+
 func buildChainlinkNode(
 	ctx context.Context,
 	progress io.Writer,
 	conf NodeConfig,
-	port uint16,
-	group, container, image string,
-	extraTOML string,
-	basePath string,
-	reset bool,
+	image dockerNodeConfig,
 ) (*ChainlinkNode, error) {
-	node, err := newNode(ctx, progress, group, container, image, port)
+	node, err := newNode(ctx, progress, image.Group, image.ContainerName, image.Image, image.Port)
 	if err != nil {
 		return nil, err
 	}
@@ -60,11 +74,11 @@ func buildChainlinkNode(
 		return nil, err
 	}
 
-	if err := ensurePostgresContainer(ctx, node, reset); err != nil {
+	if err := ensurePostgresContainer(ctx, node, image.Reset); err != nil {
 		return nil, err
 	}
 
-	if err := ensureChainlinkContainer(ctx, node, conf, extraTOML, basePath, false); err != nil {
+	if err := ensureChainlinkContainer(ctx, node, conf, image.ExtraTOML, image.BasePath, image.Reset); err != nil {
 		return nil, err
 	}
 
@@ -73,6 +87,36 @@ func buildChainlinkNode(
 	}
 
 	return node, nil
+}
+
+func removeChainlinkNode(
+	ctx context.Context,
+	image dockerNodeConfig,
+) error {
+	node, err := newNode(ctx, nil, image.Group, image.ContainerName, image.Image, image.Port)
+	if err != nil {
+		return err
+	}
+
+	if err := checkContainerState(ctx, node); err != nil {
+		return err
+	}
+
+	options := types.ContainerRemoveOptions{
+		RemoveVolumes: true,
+		RemoveLinks:   true,
+		Force:         true,
+	}
+
+	if err := node.client.ContainerRemove(ctx, node.chainlink.id, options); err != nil {
+		return fmt.Errorf("failed to remove existing container: %w", err)
+	}
+
+	if err := node.client.ContainerRemove(ctx, node.postgres.id, options); err != nil {
+		return fmt.Errorf("failed to remove existing container: %w", err)
+	}
+
+	return nil
 }
 
 func newNode(ctx context.Context, writer io.Writer, group, name, image string, port uint16) (*ChainlinkNode, error) {
@@ -96,7 +140,7 @@ func newNode(ctx context.Context, writer io.Writer, group, name, image string, p
 		client: dockerClient,
 		writer: writer,
 		postgres: nodeContainer{
-			port: 5432,
+			port: postgresPortNumber,
 			name: fmt.Sprintf("%s-%s-postgres", group, name),
 		},
 		chainlink: nodeContainer{
@@ -152,7 +196,7 @@ func checkContainerState(ctx context.Context, node *ChainlinkNode) error {
 	search := fmt.Sprintf("%s-%s", node.GroupName, node.Name)
 
 	opts := types.ContainerListOptions{
-		Filters: filters.NewArgs(filters.Arg("name", "^/"+regexp.QuoteMeta(search)+"$")),
+		Filters: filters.NewArgs(filters.Arg("name", "^/"+regexp.QuoteMeta(search)+".*$")),
 	}
 
 	containers, err := node.client.ContainerList(ctx, opts)
@@ -174,7 +218,7 @@ func checkContainerState(ctx context.Context, node *ChainlinkNode) error {
 
 func getContainerDetail(dContainer types.Container, cont nodeContainer) nodeContainer {
 	for _, port := range dContainer.Ports {
-		if port.PublicPort == cont.port {
+		if port.PublicPort == cont.port || port.PrivatePort == cont.port {
 			cont.created = true
 			cont.id = dContainer.ID
 

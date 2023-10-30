@@ -170,6 +170,7 @@ func parseResponse(resp *http.Response) ([]byte, error) {
 	if err != nil {
 		return bBody, fmt.Errorf("%w: connection failure with status (%s): %s", ErrConnection, resp.Status, err.Error())
 	}
+	fmt.Println(string(bBody))
 
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
