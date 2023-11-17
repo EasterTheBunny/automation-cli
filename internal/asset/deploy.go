@@ -3,9 +3,12 @@ package asset
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -17,6 +20,7 @@ import (
 	link "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/link_token_interface"
 	bigmath "github.com/smartcontractkit/chainlink/v2/core/utils/big_math"
 
+	"github.com/easterthebunny/automation-cli/internal/config"
 	"github.com/easterthebunny/automation-cli/internal/util"
 )
 
@@ -34,7 +38,8 @@ const (
 	RegistryModeArbitrum = 1
 	RegistryModeOptimism = 2
 
-	gasMultiplier int64 = 5
+	gasMultiplier        int64  = 5
+	defaultConfirmations uint16 = 1
 )
 
 type Deployable interface {
@@ -42,17 +47,9 @@ type Deployable interface {
 	Deploy(context.Context, *Deployer, VerifyContractConfig) (common.Address, error)
 }
 
-type DeployerConfig struct {
-	Version      string
-	RPCURL       string
-	PrivateKey   string
-	LinkContract string
-	ChainID      int64
-	GasLimit     uint64
-}
-
 type Deployer struct {
-	Config  *DeployerConfig
+	Keys    config.PrivateKeys
+	Config  *config.Environment
 	RPC     *rpc.Client
 	Client  *ethclient.Client
 	Address common.Address
@@ -63,27 +60,31 @@ type Deployer struct {
 
 // NewDeployer creates a new deployer and sets the primary address to
 // the address associated with the configured private key.
-func NewDeployer(cfg *DeployerConfig) (*Deployer, error) {
+func NewDeployer(cfg *config.Environment, key config.Key) (*Deployer, error) {
 	// Created a client by the given node address
-	rpcClient, err := rpc.Dial(cfg.RPCURL)
+	rpcClient, err := rpc.Dial(cfg.HTTPURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to connect to chain node (%s): %s", ErrNetworkConnection, cfg.RPCURL, err.Error())
+		return nil, fmt.Errorf("%w: failed to connect to chain node (%s): %s", ErrNetworkConnection, cfg.HTTPURL, err.Error())
 	}
 
 	nodeClient := ethclient.NewClient(rpcClient)
-	privateKey := parsePrivateKey(strings.TrimSpace(cfg.PrivateKey))
+	privateKey := parsePrivateKey(strings.TrimSpace(key.Value))
 
 	address, err := getAddressFromKey(privateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create link token wrapper
-	linkToken, err := link.NewLinkToken(common.HexToAddress(cfg.LinkContract), nodeClient)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"%w: failed to connect to link token contract at (%s): %s",
-			ErrContractInitialization, cfg.LinkContract, err.Error())
+	var token *link.LinkToken
+
+	if cfg.LinkToken != nil {
+		// Create link token wrapper
+		token, err = link.NewLinkToken(common.HexToAddress(cfg.LinkToken.Address), nodeClient)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"%w: failed to connect to link token contract at (%s): %s",
+				ErrContractInitialization, cfg.LinkToken.Address, err.Error())
+		}
 	}
 
 	return &Deployer{
@@ -92,7 +93,7 @@ func NewDeployer(cfg *DeployerConfig) (*Deployer, error) {
 		Client:     nodeClient,
 		Address:    address,
 		privateKey: privateKey,
-		linkToken:  linkToken,
+		linkToken:  token,
 	}, nil
 }
 
@@ -121,6 +122,7 @@ func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) 
 	auth.Nonce = big.NewInt(int64(nonce))
 	auth.Value = big.NewInt(0) // in wei
 	// auth.GasLimit = d.Config.GasLimit // in units
+	// auth.GasLimit = config.DefaultDeployerGasLimit
 	auth.GasPrice = gasPrice
 
 	return auth, nil
@@ -137,7 +139,7 @@ func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error
 		Nonce:    opts.Nonce.Uint64(),
 		To:       &addr,
 		Value:    new(big.Int).SetUint64(amount),
-		Gas:      opts.GasLimit,
+		Gas:      50_000,
 		GasPrice: opts.GasPrice,
 		Data:     nil,
 	})
@@ -147,7 +149,6 @@ func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error
 		return fmt.Errorf("failed to sign tx: %w", err)
 	}
 
-	fmt.Println("attempting to send transaction: ", signedTx.Hash())
 	if err = d.Client.SendTransaction(ctx, signedTx); err != nil {
 		return fmt.Errorf("failed to send tx: %w", err)
 	}
@@ -199,6 +200,23 @@ func (d *Deployer) ApproveLINK(ctx context.Context, toAddr string, amount uint64
 	return nil
 }
 
+func (d *Deployer) BalanceLINK(ctx context.Context, addr string) (*big.Int, error) {
+	return d.linkToken.BalanceOf(&bind.CallOpts{
+		Context: ctx,
+	}, common.HexToAddress(addr))
+}
+
+func (d *Deployer) BlockDetail(ctx context.Context) (json.RawMessage, error) {
+	var message json.RawMessage
+	err := d.RPC.CallContext(ctx, &message, "eth_getBlockByNumber", "latest", false)
+
+	return message, err
+}
+
+func (d *Deployer) Wait(ctx context.Context, trx *types.Transaction) error {
+	return d.wait(ctx, trx)
+}
+
 func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
 	fmt.Println("waiting for transaction to be mined: ", trx.Hash())
 
@@ -207,18 +225,103 @@ func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
 		return fmt.Errorf("%w: failed to wait for transaction (%s): %s", ErrChainTransaction, trx.Hash(), err.Error())
 	}
 
+	if err := waitConfirmations(ctx, d.Client, receipt, defaultConfirmations); err != nil {
+		return err
+	}
+
+	type trxType struct {
+		To          string `json:"to"`
+		From        string `json:"from"`
+		Input       string `json:"input"`
+		Gas         string `json:"gas"`
+		GasPrice    string `json:"gasPrice"`
+		BlockNumber string `json:"blockNumber"`
+	}
+
+	var rawMsg json.RawMessage
+	if err := d.RPC.CallContext(ctx, &rawMsg, "eth_getTransactionByHash", trx.Hash()); err != nil {
+		panic(err)
+	}
+
+	var message trxType
+	if err := json.Unmarshal(rawMsg, &message); err != nil {
+		panic(err)
+	}
+
+	var callRawMsg json.RawMessage
+	args := map[string]interface{}{
+		"to":   message.To,
+		"from": message.From,
+		"data": message.Input,
+		// "gas":      hexutil.EncodeUint64(60_000_000),
+		"gas":      message.Gas,
+		"gasPrice": message.GasPrice,
+	}
+
+	fmt.Printf("%+v, %s\n", args, message.BlockNumber)
+
+	if err := d.RPC.CallContext(ctx, &callRawMsg, "eth_call", args, "latest"); err != nil {
+		fmt.Println("eth call failed")
+		if json, ok := err.(*jsonError); ok {
+			fmt.Printf("%+v\n", json)
+		} else {
+			fmt.Println("not json error")
+			fmt.Printf("%+v\n", err)
+		}
+
+		panic(err)
+	}
+
+	fmt.Println("raw trx call message")
+	fmt.Println(string(callRawMsg))
+
 	if receipt.Status == types.ReceiptStatusFailed {
-		return fmt.Errorf("%w: %s: %s", ErrChainTransaction, util.ExplorerLink(d.Config.ChainID, trx.Hash()), err.Error())
+		var link string
+
+		if trx != nil {
+			link = util.ExplorerLink(d.Config.ChainID, trx.Hash())
+		}
+
+		var errStr string
+
+		if err != nil {
+			errStr = err.Error()
+		}
+
+		return fmt.Errorf("%w: %s: %s", ErrChainTransaction, link, errStr)
 	}
 
 	return nil
 }
 
+func (d *Deployer) WaitDeployment(ctx context.Context, trx *types.Transaction) error {
+	return d.waitDeployment(ctx, trx)
+}
+
 func (d *Deployer) waitDeployment(ctx context.Context, trx *types.Transaction) error {
-	if _, err := bind.WaitDeployed(ctx, d.Client, trx); err != nil {
-		return fmt.Errorf(
-			"%w: WaitDeployed failed %s: %s",
-			ErrChainTransaction, util.ExplorerLink(d.Config.ChainID, trx.Hash()), err.Error())
+	if trx.To() != nil {
+		return errors.New("tx is not contract creation")
+	}
+
+	receipt, err := bind.WaitMined(ctx, d.Client, trx)
+	if err != nil {
+		return fmt.Errorf("%w: failed to wait for transaction (%s): %s", ErrChainTransaction, trx.Hash(), err.Error())
+	}
+
+	if receipt.ContractAddress == (common.Address{}) {
+		return errors.New("zero address")
+	}
+
+	if err := waitConfirmations(ctx, d.Client, receipt, defaultConfirmations); err != nil {
+		return err
+	}
+
+	// Check that code has indeed been deployed at the address.
+	// This matters on pre-Homestead chains: OOG in the constructor
+	// could leave an empty account behind.
+	code, err := d.Client.CodeAt(ctx, receipt.ContractAddress, nil)
+	if err == nil && len(code) == 0 {
+		err = bind.ErrNoCodeAfterDeploy
 	}
 
 	return nil
@@ -247,4 +350,40 @@ func getAddressFromKey(key *ecdsa.PrivateKey) (common.Address, error) {
 	}
 
 	return crypto.PubkeyToAddress(*publicKeyECDSA), nil
+}
+
+type jsonError struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+func (err *jsonError) Error() string {
+	if err.Message == "" {
+		return fmt.Sprintf("json-rpc error %d", err.Code)
+	}
+	return err.Message
+}
+
+func waitConfirmations(ctx context.Context, client *ethclient.Client, receipt *types.Receipt, confs uint16) error {
+	queryTicker := time.NewTicker(time.Second)
+	defer queryTicker.Stop()
+
+	for {
+		block, err := client.BlockNumber(ctx)
+		if err != nil {
+			return err
+		}
+
+		if block-receipt.BlockNumber.Uint64() >= uint64(confs) {
+			return nil
+		}
+
+		// Wait for the next round.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-queryTicker.C:
+		}
+	}
 }

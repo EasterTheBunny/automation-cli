@@ -15,7 +15,7 @@ func create(path string) (*os.File, error) {
 	return os.Create(path)
 }
 
-func writeCredentials(path string) error {
+func writeCredentials(path, login, password string) error {
 	apiFile, err := create(fmt.Sprintf("%s/chainlink-node-api", path))
 	if err != nil {
 		return err
@@ -23,9 +23,9 @@ func writeCredentials(path string) error {
 
 	defer apiFile.Close()
 
-	_, _ = apiFile.WriteString(DefaultChainlinkNodeLogin)
+	_, _ = apiFile.WriteString(login)
 	_, _ = apiFile.WriteString("\n")
-	_, _ = apiFile.WriteString(DefaultChainlinkNodePassword)
+	_, _ = apiFile.WriteString(password)
 
 	passwordFile, err := create(fmt.Sprintf("%s/chainlink-node-password", path))
 	if err != nil {
@@ -34,7 +34,7 @@ func writeCredentials(path string) error {
 
 	defer passwordFile.Close()
 
-	_, _ = passwordFile.WriteString(DefaultChainlinkNodePassword)
+	_, _ = passwordFile.WriteString(password)
 
 	return nil
 }

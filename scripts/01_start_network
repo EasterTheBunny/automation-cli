@@ -1,0 +1,15 @@
+#!/bin/bash
+
+FUNDING_ADDR="0xB8756248CaE3D5cf6af1FAd1ab778E3B6b219dd9"
+
+echo 'starting geth node in dev mode'
+geth --dev --dev.period=3 --mine \
+        --datadir="./data" --keystore="./keystore" --password="./password.txt" \
+        --unlock=$FUNDING_ADDR --miner.etherbase=$FUNDING_ADDR \
+        --ipcdisable --http --http.vhosts="*" --http.addr="0.0.0.0" --http.port=7545 \
+        --ws --ws.origins="*" --ws.addr="0.0.0.0" --ws.port=7545 \
+        --graphql --graphql.corsdomain="*" \
+        --allow-insecure-unlock --rpc.allow-unprotected-txs --rpc.txfeecap=0 \
+        --http.api="web3,eth,net" --http.corsdomain="*" \
+        --ws.api="admin,debug,web3,eth,txpool,personal,miner,net" \
+        --vmdebug --networkid=1337 --verbosity=1

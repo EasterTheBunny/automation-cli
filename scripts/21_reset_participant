@@ -1,0 +1,3 @@
+#!/bin/bash
+
+automation-cli network participant reset 2 chainlink:custom --log-level="debug" --environment="geth.local"

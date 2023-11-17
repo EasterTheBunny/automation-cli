@@ -1,0 +1,6 @@
+#!/bin/bash
+
+ENVIRONMENT="geth.local"
+
+automation-cli contract verifiable-load deploy --type="log-trigger" --environment=$ENVIRONMENT
+automation-cli contract verifiable-load deploy --type="conditional" --environment=$ENVIRONMENT
