@@ -55,8 +55,12 @@ func (d *LinkTokenDeployable) Deploy(
 func (d *LinkTokenDeployable) Mint(
 	ctx context.Context,
 	deployer *Deployer,
-	amount uint64,
+	amount *big.Int,
 ) error {
+	if _, err := d.connectToInterface(ctx, common.HexToAddress(d.config.Address), deployer); err != nil {
+		return err
+	}
+
 	if err := ensureMintingRole(ctx, d.token, deployer); err != nil {
 		return err
 	}
@@ -126,7 +130,7 @@ func mintAmountTo(
 	ctx context.Context,
 	contract *link_token.LinkToken,
 	deployer *Deployer,
-	amt uint64,
+	amt *big.Int,
 	to common.Address,
 ) error {
 	opts, err := deployer.BuildTxOpts(ctx)
@@ -134,7 +138,7 @@ func mintAmountTo(
 		return err
 	}
 
-	trx, err := contract.Mint(opts, to, new(big.Int).SetUint64(amt))
+	trx, err := contract.Mint(opts, to, amt)
 	if err != nil {
 		return err
 	}

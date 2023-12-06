@@ -131,14 +131,6 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 
 	onchainConfig := makeOnchainConfig(d.rCfg.Onchain)
 
-	fmt.Printf("%+v\n", opts)
-	fmt.Printf("%+v\n", signers)
-	fmt.Printf("%+v\n", transmitters)
-	fmt.Printf("%+v\n", maxFault)
-	fmt.Printf("%+v\n", onchainConfig)
-	fmt.Printf("%+v\n", offchainConfigVersion)
-	fmt.Printf("%+v\n", offchainConfig)
-
 	trx, err := d.registry.SetConfigTypeSafe(
 		opts, signers, transmitters, maxFault,
 		onchainConfig, offchainConfigVersion, offchainConfig,

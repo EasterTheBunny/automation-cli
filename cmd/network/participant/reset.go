@@ -74,6 +74,10 @@ This assumes the four provided keys are aliases to existing saved keys.`,
 
 			nodeConfigPath := fmt.Sprintf("%s/%s", basePath, conf.Name)
 
+			if logLevel != "" {
+				conf.LogLevel = logLevel
+			}
+
 			// set the new image
 			conf.Image = args[1]
 			conf.PrivateKeyAlias = alias

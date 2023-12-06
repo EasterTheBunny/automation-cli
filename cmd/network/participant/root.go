@@ -7,7 +7,7 @@ func init() {
 	RootCmd.AddCommand(resetCmd)
 	RootCmd.AddCommand(removeCmd)
 
-	RootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "error", "set the log level for the node")
+	RootCmd.PersistentFlags().StringVar(&logLevel, "log-level", "", "set the log level for the node")
 
 	removeCmd.Flags().BoolVar(&removeAll, "all", false, "remove all participants")
 }

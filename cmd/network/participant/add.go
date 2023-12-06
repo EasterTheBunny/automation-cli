@@ -75,6 +75,10 @@ This assumes the four provided keys are aliases to existing saved keys.`,
 
 			existing := len(env.Participants)
 
+			if logLevel == "" {
+				logLevel = "error"
+			}
+
 			for idx := 0; idx < int(count); idx++ {
 				nodeID := idx + existing
 

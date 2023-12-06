@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,10 +13,10 @@ var (
 	ErrInvalidAmount      = fmt.Errorf("invalid amount")
 )
 
-func ParseExp(input string) (uint64, error) {
+func ParseExp(input string) (*big.Int, error) {
 	var (
-		amount uint64
-		err    error
+		amount *big.Int
+		valid  bool
 	)
 
 	allDigits := regexp.MustCompile(`^[0-9]+$`)
@@ -24,14 +25,14 @@ func ParseExp(input string) (uint64, error) {
 
 	switch {
 	case allDigits.MatchString(strAmount):
-		amount, err = strconv.ParseUint(strAmount, 10, 64)
-		if err != nil {
-			return amount, fmt.Errorf("%w: %s", ErrExponentParseError, err.Error())
+		amount, valid = new(big.Int).SetString(strAmount, 10)
+		if !valid {
+			return amount, fmt.Errorf("%w: invalid big int", ErrExponentParseError)
 		}
 	case usesExp.MatchString(strAmount):
 		parts := strings.Split(strAmount, "e")
 
-		zeros, err := strconv.ParseInt(parts[1], 10, 64)
+		zeros, err := strconv.ParseUint(parts[1], 10, 64)
 		if err != nil {
 			return amount, fmt.Errorf("%w: %s", ErrExponentParseError, err.Error())
 		}
@@ -44,9 +45,9 @@ func ParseExp(input string) (uint64, error) {
 			strVal.WriteString("0")
 		}
 
-		amount, err = strconv.ParseUint(strVal.String(), 10, 64)
-		if err != nil {
-			return amount, fmt.Errorf("%w: %s", ErrExponentParseError, err.Error())
+		amount, valid = new(big.Int).SetString(strVal.String(), 10)
+		if !valid {
+			return amount, fmt.Errorf("%w: invalid big int", ErrExponentParseError)
 		}
 	default:
 		return amount, ErrInvalidAmount

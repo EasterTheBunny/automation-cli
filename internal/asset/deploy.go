@@ -39,7 +39,7 @@ const (
 	RegistryModeOptimism = 2
 
 	gasMultiplier        int64  = 5
-	defaultConfirmations uint16 = 1
+	defaultConfirmations uint16 = 10
 )
 
 type Deployable interface {
@@ -128,7 +128,7 @@ func (d *Deployer) BuildTxOpts(ctx context.Context) (*bind.TransactOpts, error) 
 	return auth, nil
 }
 
-func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error {
+func (d *Deployer) Send(ctx context.Context, toAddr string, amount *big.Int) error {
 	opts, err := d.BuildTxOpts(ctx)
 	if err != nil {
 		return err
@@ -138,7 +138,7 @@ func (d *Deployer) Send(ctx context.Context, toAddr string, amount uint64) error
 	trx := types.NewTx(&types.LegacyTx{
 		Nonce:    opts.Nonce.Uint64(),
 		To:       &addr,
-		Value:    new(big.Int).SetUint64(amount),
+		Value:    amount,
 		Gas:      50_000,
 		GasPrice: opts.GasPrice,
 		Data:     nil,
@@ -225,56 +225,6 @@ func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
 		return fmt.Errorf("%w: failed to wait for transaction (%s): %s", ErrChainTransaction, trx.Hash(), err.Error())
 	}
 
-	if err := waitConfirmations(ctx, d.Client, receipt, defaultConfirmations); err != nil {
-		return err
-	}
-
-	type trxType struct {
-		To          string `json:"to"`
-		From        string `json:"from"`
-		Input       string `json:"input"`
-		Gas         string `json:"gas"`
-		GasPrice    string `json:"gasPrice"`
-		BlockNumber string `json:"blockNumber"`
-	}
-
-	var rawMsg json.RawMessage
-	if err := d.RPC.CallContext(ctx, &rawMsg, "eth_getTransactionByHash", trx.Hash()); err != nil {
-		panic(err)
-	}
-
-	var message trxType
-	if err := json.Unmarshal(rawMsg, &message); err != nil {
-		panic(err)
-	}
-
-	var callRawMsg json.RawMessage
-	args := map[string]interface{}{
-		"to":   message.To,
-		"from": message.From,
-		"data": message.Input,
-		// "gas":      hexutil.EncodeUint64(60_000_000),
-		"gas":      message.Gas,
-		"gasPrice": message.GasPrice,
-	}
-
-	fmt.Printf("%+v, %s\n", args, message.BlockNumber)
-
-	if err := d.RPC.CallContext(ctx, &callRawMsg, "eth_call", args, "latest"); err != nil {
-		fmt.Println("eth call failed")
-		if json, ok := err.(*jsonError); ok {
-			fmt.Printf("%+v\n", json)
-		} else {
-			fmt.Println("not json error")
-			fmt.Printf("%+v\n", err)
-		}
-
-		panic(err)
-	}
-
-	fmt.Println("raw trx call message")
-	fmt.Println(string(callRawMsg))
-
 	if receipt.Status == types.ReceiptStatusFailed {
 		var link string
 
@@ -289,6 +239,10 @@ func (d *Deployer) wait(ctx context.Context, trx *types.Transaction) error {
 		}
 
 		return fmt.Errorf("%w: %s: %s", ErrChainTransaction, link, errStr)
+	}
+
+	if err := waitConfirmations(ctx, d.Client, receipt, defaultConfirmations); err != nil {
+		return err
 	}
 
 	return nil

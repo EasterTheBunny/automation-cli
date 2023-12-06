@@ -66,7 +66,7 @@ var (
 
 			feed := config.FeedContract{
 				Mocked:        true,
-				DefaultAnswer: amount,
+				DefaultAnswer: amount.Uint64(),
 			}
 
 			deployer, err := asset.NewDeployer(&env, key)
