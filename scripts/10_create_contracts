@@ -1,0 +1,23 @@
+#!/bin/bash
+
+ENVIRONMENT="geth.local"
+
+automation-cli contract link deploy-token --environment="${ENVIRONMENT}"
+echo "link token address: "
+automation-cli configure get link_contract_address --environment="${ENVIRONMENT}"
+
+automation-cli contract link deploy-feed link-eth --answer="2e18" --environment="${ENVIRONMENT}"
+echo "link eth feed address: "
+automation-cli configure get link_eth_feed --environment="${ENVIRONMENT}"
+
+automation-cli contract link deploy-feed fast-gas --answer="6e10" --environment="${ENVIRONMENT}"
+echo "fast gas feed address: "
+automation-cli configure get fast_gas_feed --environment="${ENVIRONMENT}"
+
+automation-cli contract registry deploy --environment="${ENVIRONMENT}"
+echo "registry address: "
+automation-cli configure get service_contract.registry_address --environment="${ENVIRONMENT}"
+
+automation-cli contract registrar deploy --environment="${ENVIRONMENT}"
+echo "registrar address: "
+automation-cli configure get service_contract.registrar_address --environment="${ENVIRONMENT}"

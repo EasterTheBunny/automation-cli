@@ -1,0 +1,11 @@
+#!/bin/bash
+
+ADDR="192.168.50.135"
+
+echo 'importing keys into automation-cli'
+automation-cli key import-geth geth-local ./keystore
+
+CONFIG='{"chain_id":1337,"private_key_alias":"geth-local-0","http_rpc":"http://${ADDR}:7545","ws_rpc":"ws://${ADDR}:7545"}'
+
+echo 'configuring ganache.local automation environment'
+echo $CONFIG | automation-cli configure setup --json --environment="geth.local"

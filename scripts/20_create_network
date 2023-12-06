@@ -1,0 +1,26 @@
+#!/bin/bash
+
+IMAGE="chainlink:local"
+ENVIRONMENT="geth.local"
+KEY="geth-local-0"
+KEYPREFIX="geth-local"
+COUNT=7 # creates 7 participant nodes
+
+echo 'creating bootstrap node'
+automation-cli network bootstrap set ${IMAGE} --environment=${ENVIRONMENT}
+
+for (( i=1 ; i<=${COUNT} ; i++ )); 
+do
+    nodeKey="${KEYPREFIX}-${i}"
+
+    echo 'creating participant node'
+    automation-cli network participant add ${IMAGE} --count=1 --log-level="error" --environment=${ENVIRONMENT} --key=${nodeKey}
+    # TODO: fund nodes instead of using keys
+done
+
+echo "node participants:"
+
+automation-cli network list --environment=${ENVIRONMENT}
+
+echo 'setting off-chain config'
+automation-cli contract registry set-config --environment=${ENVIRONMENT}

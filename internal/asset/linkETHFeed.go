@@ -7,25 +7,23 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/mock_ethlink_aggregator_wrapper"
-)
 
-type LinkETHFeedConfig struct {
-	Answer uint64
-}
+	"github.com/easterthebunny/automation-cli/internal/config"
+)
 
 type LinkETHFeedDeployable struct {
 	contract *mock_ethlink_aggregator_wrapper.MockETHLINKAggregator
-	config   *LinkETHFeedConfig
+	config   *config.FeedContract
 }
 
-func NewLinkETHFeedDeployable(config *LinkETHFeedConfig) *LinkETHFeedDeployable {
+func NewLinkETHFeedDeployable(conf *config.FeedContract) *LinkETHFeedDeployable {
 	return &LinkETHFeedDeployable{
-		config: config,
+		config: conf,
 	}
 }
 
-func (d *LinkETHFeedDeployable) Connect(_ context.Context, addr string, deployer *Deployer) (common.Address, error) {
-	return d.connectToInterface(common.HexToAddress(addr), deployer)
+func (d *LinkETHFeedDeployable) Connect(_ context.Context, deployer *Deployer) (common.Address, error) {
+	return d.connectToInterface(common.HexToAddress(d.config.Address), deployer)
 }
 
 func (d *LinkETHFeedDeployable) Deploy(
@@ -42,7 +40,7 @@ func (d *LinkETHFeedDeployable) Deploy(
 	contractAddr, trx, _, err := mock_ethlink_aggregator_wrapper.DeployMockETHLINKAggregator(
 		opts,
 		deployer.Client,
-		new(big.Int).SetUint64(d.config.Answer),
+		new(big.Int).SetUint64(d.config.DefaultAnswer),
 	)
 	if err != nil {
 		return contractAddr, fmt.Errorf("%w: LINK native feed creation failed: %s", ErrContractCreate, err.Error())
@@ -51,6 +49,8 @@ func (d *LinkETHFeedDeployable) Deploy(
 	if err := deployer.waitDeployment(ctx, trx); err != nil {
 		return contractAddr, err
 	}
+
+	d.config.Address = contractAddr.Hex()
 
 	return contractAddr, nil
 }

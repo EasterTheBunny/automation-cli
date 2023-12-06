@@ -15,6 +15,8 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+
+	"github.com/easterthebunny/automation-cli/internal/config"
 )
 
 const (
@@ -54,7 +56,7 @@ type dockerNodeConfig struct {
 func buildChainlinkNode(
 	ctx context.Context,
 	progress io.Writer,
-	conf NodeConfig,
+	conf *config.NodeConfig,
 	image dockerNodeConfig,
 ) (*ChainlinkNode, error) {
 	node, err := newNode(ctx, progress, image.Group, image.ContainerName, image.Image, image.Port)
@@ -293,7 +295,7 @@ func ensurePostgresContainer(ctx context.Context, node *ChainlinkNode, reset boo
 func ensureChainlinkContainer(
 	ctx context.Context,
 	node *ChainlinkNode,
-	conf NodeConfig,
+	conf *config.NodeConfig,
 	extraTOML string,
 	basePath string,
 	reset bool,
@@ -317,15 +319,15 @@ func ensureChainlinkContainer(
 
 		path := fmt.Sprintf("%s/secrets", basePath)
 
-		if err := writeCredentials(path); err != nil {
+		if err := writeCredentials(path, conf.LoginName, conf.LoginPassword); err != nil {
 			return fmt.Errorf("failed to create creds files: %w", err)
 		}
 
-		if err := writeFile(fmt.Sprintf("%s/01-config.toml", path), NodeTOML(conf)); err != nil {
+		if err := writeFile(fmt.Sprintf("%s/01-config.toml", path), NodeTOML(*conf)); err != nil {
 			return err
 		}
 
-		if err := writeFile(fmt.Sprintf("%s/01-secret.toml", path), SecretTOML(conf)); err != nil {
+		if err := writeFile(fmt.Sprintf("%s/01-secret.toml", path), SecretTOML(*conf)); err != nil {
 			return err
 		}
 
@@ -341,7 +343,7 @@ func ensureChainlinkContainer(
 				},
 				Env: []string{
 					"CL_CONFIG=" + extraTOML,
-					"CL_PASSWORD_KEYSTORE=" + DefaultChainlinkNodePassword,
+					"CL_PASSWORD_KEYSTORE=" + conf.LoginPassword,
 					"CL_DATABASE_URL=postgresql://postgres:verylongdatabasepassword@" + node.postgres.name + ":5432/postgres?sslmode=disable",
 				},
 				ExposedPorts: map[nat.Port]struct{}{

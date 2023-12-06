@@ -5,39 +5,35 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/easterthebunny/automation-cli/internal/config"
 	"github.com/ethereum/go-ethereum/common"
 	registrar "github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/automation_registrar_wrapper2_1"
 )
 
-type RegistrarV21Config struct {
-	RegistryAddr  string
-	LinkTokenAddr string
-	MinLink       int64
-}
-
 type RegistrarV21Deployable struct {
 	contract *registrar.AutomationRegistrar
-	cCfg     *RegistrarV21Config
+	link     config.LinkTokenContract
+	registry config.AutomationRegistryV21Contract
+	cCfg     *config.AutomationRegistrarV21Contract
 }
 
-func NewRegistrarV21Deployable(cCfg *RegistrarV21Config) *RegistrarV21Deployable {
+func NewRegistrarV21Deployable(
+	link config.LinkTokenContract,
+	registry config.AutomationRegistryV21Contract,
+	cCfg *config.AutomationRegistrarV21Contract,
+) *RegistrarV21Deployable {
 	return &RegistrarV21Deployable{
-		cCfg: cCfg,
+		link:     link,
+		registry: registry,
+		cCfg:     cCfg,
 	}
 }
 
-func (d *RegistrarV21Deployable) Connect(
-	ctx context.Context,
-	addr string,
-	deployer *Deployer,
-) (common.Address, error) {
-	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
+func (d *RegistrarV21Deployable) Connect(ctx context.Context, deployer *Deployer) (common.Address, error) {
+	return d.connectToInterface(ctx, common.HexToAddress(d.cCfg.Address), deployer)
 }
 
-func (d *RegistrarV21Deployable) Deploy(
-	ctx context.Context,
-	deployer *Deployer,
-) (common.Address, error) {
+func (d *RegistrarV21Deployable) Deploy(ctx context.Context, deployer *Deployer) (common.Address, error) {
 	var contractAddr common.Address
 
 	opts, err := deployer.BuildTxOpts(ctx)
@@ -45,21 +41,18 @@ func (d *RegistrarV21Deployable) Deploy(
 		return contractAddr, fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
 	}
 
-	registry := common.HexToAddress(d.cCfg.RegistryAddr)
-	linkAddr := common.HexToAddress(d.cCfg.LinkTokenAddr)
+	registry := common.HexToAddress(d.registry.Address)
+	linkAddr := common.HexToAddress(d.link.Address)
 	minLink := big.NewInt(d.cCfg.MinLink)
 
-	configs := []registrar.AutomationRegistrar21InitialTriggerConfig{
-		{
-			TriggerType:           0,
-			AutoApproveType:       2,
-			AutoApproveMaxAllowed: 1_000,
-		},
-		{
-			TriggerType:           1,
-			AutoApproveType:       2,
-			AutoApproveMaxAllowed: 1_000,
-		},
+	configs := []registrar.AutomationRegistrar21InitialTriggerConfig{}
+
+	for _, conf := range d.cCfg.AutoApprovals {
+		configs = append(configs, registrar.AutomationRegistrar21InitialTriggerConfig{
+			TriggerType:           conf.TriggerType,
+			AutoApproveType:       conf.AutoApproveType,
+			AutoApproveMaxAllowed: conf.AutoApproveMaxAllowed,
+		})
 	}
 
 	contractAddr, trx, _, err := registrar.DeployAutomationRegistrar(
@@ -84,6 +77,8 @@ func (d *RegistrarV21Deployable) Deploy(
 			"[]",
 		)
 	*/
+
+	d.cCfg.Address = contractAddr.Hex()
 
 	return contractAddr, nil
 }

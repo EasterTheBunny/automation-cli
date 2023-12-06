@@ -1,0 +1,9 @@
+#!/bin/bash
+
+COUNT=5
+
+for (( i=1 ; i<=${COUNT} ; i++ ));
+do
+    echo "registering upkeeps ${i}"
+    automation-cli contract verifiable-load register-upkeeps --count=10 --type="log-trigger" --send-link --environment="geth.local"
+done

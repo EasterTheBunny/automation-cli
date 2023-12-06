@@ -188,7 +188,7 @@ func getNodeOCR2Config(client HTTPClient) (*OCR2KeyBundlePresenter, error) {
 }
 
 // addKeyToKeeper imports the provided ETH sending key to the keeper
-func addKeyToKeeper(client HTTPClient, privKeyHex string, chainID int64) (string, error) {
+func addKeyToKeeper(client HTTPClient, privKeyHex, password string, chainID int64) (string, error) {
 	privkey, err := crypto.HexToECDSA(util.RemoveHexPrefix(privKeyHex))
 	if err != nil {
 		log.Fatalf("Failed to decode priv key %s: %v", privKeyHex, err)
@@ -196,7 +196,7 @@ func addKeyToKeeper(client HTTPClient, privKeyHex string, chainID int64) (string
 
 	address := crypto.PubkeyToAddress(privkey.PublicKey).Hex()
 
-	keyJSON, err := util.FromPrivateKey(privkey).ToEncryptedJSON(DefaultChainlinkNodePassword, util.FastScryptParams)
+	keyJSON, err := util.FromPrivateKey(privkey).ToEncryptedJSON(password, util.FastScryptParams)
 	if err != nil {
 		return "", fmt.Errorf("Failed to encrypt piv key %s: %s", privKeyHex, err.Error())
 	}
@@ -207,7 +207,7 @@ func addKeyToKeeper(client HTTPClient, privKeyHex string, chainID int64) (string
 
 	query := importUrl.Query()
 
-	query.Set("oldpassword", DefaultChainlinkNodePassword)
+	query.Set("oldpassword", password)
 	query.Set("evmChainID", fmt.Sprint(chainID))
 
 	importUrl.RawQuery = query.Encode()

@@ -1,0 +1,3 @@
+#!/bin/bash
+
+automation-cli contract verifiable-load get-stats --type="log-trigger" --environment="geth.local"

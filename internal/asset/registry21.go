@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
-	"time"
 
+	"github.com/easterthebunny/automation-cli/internal/config"
 	"github.com/ethereum/go-ethereum/common"
 
 	ocr2config "github.com/smartcontractkit/libocr/offchainreporting2plus/confighelper"
@@ -25,82 +25,39 @@ import (
 )
 
 var (
+	ErrConfiguration      = fmt.Errorf("configuration error")
 	ErrContractConnection = fmt.Errorf("contract connection")
 	ErrContractCreate     = fmt.Errorf("contract creation")
 )
 
-type RegistryV21Config struct {
-	Mode            uint8
-	LinkTokenAddr   string
-	LinkETHFeedAddr string
-	FastGasFeedAddr string
-}
-
-type OCR2NodeConfig struct {
-	Address           string
-	OffChainPublicKey string
-	ConfigPublicKey   string
-	OnchainPublicKey  string
-	P2PKeyID          string
-}
-
-type AutomationV21OffchainConfig struct {
-	PerformLockoutWindow int64
-	MinConfirmations     int
-	TargetProbability    string
-	TargetInRounds       int
-	GasLimitPerReport    uint32
-	GasOverheadPerUpkeep uint32
-	MaxUpkeepBatchSize   int
-}
-
-type AutomationV21OnchainConfig struct {
-	PaymentPremiumPPB      uint32
-	FlatFeeMicroLink       uint32
-	CheckGasLimit          uint32
-	StalenessSeconds       *big.Int
-	GasCeilingMultiplier   uint16
-	MinUpkeepSpend         *big.Int
-	MaxPerformGas          uint32
-	MaxCheckDataSize       uint32
-	MaxPerformDataSize     uint32
-	MaxRevertDataSize      uint32
-	FallbackGasPrice       *big.Int
-	FallbackLinkPrice      *big.Int
-	Transcoder             string
-	Registrar              string
-	UpkeepPrivilegeManager string
-}
-
-type OCR3NetworkConfig struct {
-	DeltaProgress                           time.Duration
-	DeltaResend                             time.Duration
-	DeltaInitial                            time.Duration
-	DeltaRound                              time.Duration
-	DeltaGrace                              time.Duration
-	DeltaCertifiedCommitRequest             time.Duration
-	DeltaStage                              time.Duration
-	MaxRounds                               uint64
-	MaxDurationQuery                        time.Duration
-	MaxDurationObservation                  time.Duration
-	MaxDurationShouldAcceptFinalizedReport  time.Duration
-	MaxDurationShouldTransmitAcceptedReport time.Duration
-	MaxFaultyNodes                          int
-}
+const (
+	publicKeyLength = 20
+)
 
 type RegistryV21Deployable struct {
 	registry *iregistry.IKeeperRegistryMaster
-	rCfg     *RegistryV21Config
+	link     config.LinkTokenContract
+	linkFeed config.FeedContract
+	gasFeed  config.FeedContract
+	rCfg     *config.AutomationRegistryV21Contract
 }
 
-func NewRegistryV21Deployable(rCfg *RegistryV21Config) *RegistryV21Deployable {
+func NewRegistryV21Deployable(
+	link config.LinkTokenContract,
+	linkFeed config.FeedContract,
+	gasFeed config.FeedContract,
+	rCfg *config.AutomationRegistryV21Contract,
+) *RegistryV21Deployable {
 	return &RegistryV21Deployable{
-		rCfg: rCfg,
+		link:     link,
+		linkFeed: linkFeed,
+		gasFeed:  gasFeed,
+		rCfg:     rCfg,
 	}
 }
 
-func (d *RegistryV21Deployable) Connect(ctx context.Context, addr string, deployer *Deployer) (common.Address, error) {
-	return d.connectToInterface(ctx, common.HexToAddress(addr), deployer)
+func (d *RegistryV21Deployable) Connect(ctx context.Context, deployer *Deployer) (common.Address, error) {
+	return d.connectToInterface(ctx, common.HexToAddress(d.rCfg.Address), deployer)
 }
 
 func (d *RegistryV21Deployable) Deploy(ctx context.Context, deployer *Deployer) (common.Address, error) {
@@ -126,100 +83,28 @@ func (d *RegistryV21Deployable) Deploy(ctx context.Context, deployer *Deployer) 
 		return registryAddr, err
 	}
 
+	d.rCfg.Address = registryAddr.Hex()
+
 	return d.connectToInterface(ctx, registryAddr, deployer)
 }
 
 func (d *RegistryV21Deployable) SetOffchainConfig(
 	ctx context.Context,
 	deployer *Deployer,
-	nodeConfs []OCR2NodeConfig,
-	ocrConf OCR3NetworkConfig,
-	offchain AutomationV21OffchainConfig,
-	onchain AutomationV21OnchainConfig,
+	nodeConfs []config.NodeConfig,
 ) error {
 	opts, err := deployer.BuildTxOpts(ctx)
 	if err != nil {
 		return fmt.Errorf("%w: deploy failed: %s", ErrContractCreate, err.Error())
 	}
 
-	S := make([]int, len(nodeConfs))
-	oracleIdentities := make([]ocr2config.OracleIdentityExtra, len(nodeConfs))
-	sharedSecretEncryptionPublicKeys := make([]ocr2types.ConfigEncryptionPublicKey, len(nodeConfs))
-
-	for idx, nodeConf := range nodeConfs {
-		offchainPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.OffChainPublicKey, "ocr2off_evm_"))
-		if err != nil {
-			return fmt.Errorf("failed to decode %s: %v", nodeConf.OffChainPublicKey, err)
-		}
-
-		offchainPkBytesFixed := [ed25519.PublicKeySize]byte{}
-		n := copy(offchainPkBytesFixed[:], offchainPkBytes)
-		if n != ed25519.PublicKeySize {
-			return fmt.Errorf("wrong num elements copied")
-		}
-
-		configPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.ConfigPublicKey, "ocr2cfg_evm_"))
-		if err != nil {
-			return fmt.Errorf("failed to decode %s: %v", nodeConf.ConfigPublicKey, err)
-		}
-
-		configPkBytesFixed := [ed25519.PublicKeySize]byte{}
-		n = copy(configPkBytesFixed[:], configPkBytes)
-		if n != ed25519.PublicKeySize {
-			return fmt.Errorf("wrong num elements copied")
-		}
-
-		onchainPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.OnchainPublicKey, "ocr2on_evm_"))
-		if err != nil {
-			return fmt.Errorf("failed to decode %s: %v", nodeConf.OnchainPublicKey, err)
-		}
-
-		sharedSecretEncryptionPublicKeys[idx] = configPkBytesFixed
-		oracleIdentities[idx] = ocr2config.OracleIdentityExtra{
-			OracleIdentity: ocr2config.OracleIdentity{
-				OnchainPublicKey:  onchainPkBytes,
-				OffchainPublicKey: offchainPkBytesFixed,
-				PeerID:            nodeConf.P2PKeyID,
-				TransmitAccount:   ocr2types.Account(nodeConf.Address),
-			},
-			ConfigEncryptionPublicKey: configPkBytesFixed,
-		}
-
-		S[idx] = 1
-	}
-
-	offC, err := json.Marshal(offchain21config.OffchainConfig{
-		PerformLockoutWindow: offchain.PerformLockoutWindow, // 100 * 3 * 1000, // ~100 block lockout (on mumbai)
-		MinConfirmations:     offchain.MinConfirmations,
-		TargetProbability:    offchain.TargetProbability,
-		TargetInRounds:       offchain.TargetInRounds,
-		GasLimitPerReport:    offchain.GasLimitPerReport,
-		GasOverheadPerUpkeep: offchain.GasOverheadPerUpkeep,
-		MaxUpkeepBatchSize:   offchain.MaxUpkeepBatchSize,
-	})
+	networkS, oracleIdentities, _, err := makeOracles(nodeConfs)
 	if err != nil {
 		return err
 	}
 
-	signerOnchainPublicKeys, transmitterAccounts, f, _, offchainConfigVersion, offchainConfig, err := ocr3confighelper.ContractSetConfigArgsForTests(
-		ocrConf.DeltaProgress,
-		ocrConf.DeltaResend,
-		ocrConf.DeltaInitial,
-		ocrConf.DeltaRound,
-		ocrConf.DeltaGrace,
-		ocrConf.DeltaCertifiedCommitRequest,
-		ocrConf.DeltaStage,
-		ocrConf.MaxRounds,
-		S,                // s []int,
-		oracleIdentities, // oracles []OracleIdentityExtra,
-		offC,             // reportingPluginConfig []byte,
-		ocrConf.MaxDurationQuery,
-		ocrConf.MaxDurationObservation,
-		ocrConf.MaxDurationShouldAcceptFinalizedReport,
-		ocrConf.MaxDurationShouldTransmitAcceptedReport,
-		ocrConf.MaxFaultyNodes,
-		nil, // onchainConfig []byte,
-	)
+	//nolint:lll
+	signerOnchainPublicKeys, transmitterAccounts, maxFault, offchainConfigVersion, offchainConfig, err := makeOCRConfigs(d.rCfg, networkS, oracleIdentities)
 	if err != nil {
 		return err
 	}
@@ -227,8 +112,8 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 	signers := make([]common.Address, 0)
 
 	for _, signer := range signerOnchainPublicKeys {
-		if len(signer) != 20 {
-			return fmt.Errorf("OnChainPublicKey has wrong length for address")
+		if len(signer) != publicKeyLength {
+			return fmt.Errorf("%w: OnChainPublicKey has wrong length for address", ErrConfiguration)
 		}
 
 		signers = append(signers, common.BytesToAddress(signer))
@@ -238,37 +123,24 @@ func (d *RegistryV21Deployable) SetOffchainConfig(
 
 	for _, transmitter := range transmitterAccounts {
 		if !common.IsHexAddress(string(transmitter)) {
-			return fmt.Errorf("TransmitAccount is not a valid Ethereum address")
+			return fmt.Errorf("%w: TransmitAccount is not a valid Ethereum address", ErrConfiguration)
 		}
 
 		transmitters = append(transmitters, common.HexToAddress(string(transmitter)))
 	}
 
-	onchainConfig := iregistry.KeeperRegistryBase21OnchainConfig{
-		PaymentPremiumPPB:      onchain.PaymentPremiumPPB,
-		FlatFeeMicroLink:       onchain.FlatFeeMicroLink,
-		CheckGasLimit:          onchain.CheckGasLimit,
-		StalenessSeconds:       onchain.StalenessSeconds,
-		GasCeilingMultiplier:   onchain.GasCeilingMultiplier,
-		MinUpkeepSpend:         onchain.MinUpkeepSpend,
-		MaxPerformGas:          onchain.MaxPerformGas,
-		MaxCheckDataSize:       onchain.MaxCheckDataSize,
-		MaxPerformDataSize:     onchain.MaxPerformDataSize,
-		MaxRevertDataSize:      onchain.MaxRevertDataSize,
-		FallbackGasPrice:       onchain.FallbackGasPrice,
-		FallbackLinkPrice:      onchain.FallbackLinkPrice,
-		Transcoder:             common.HexToAddress(onchain.Transcoder),
-		Registrars:             []common.Address{common.HexToAddress(onchain.Registrar)},
-		UpkeepPrivilegeManager: common.HexToAddress(onchain.UpkeepPrivilegeManager),
-	}
+	onchainConfig := makeOnchainConfig(d.rCfg.Onchain)
 
-	trx, err := d.registry.SetConfigTypeSafe(opts, signers, transmitters, f, onchainConfig, offchainConfigVersion, offchainConfig)
+	trx, err := d.registry.SetConfigTypeSafe(
+		opts, signers, transmitters, maxFault,
+		onchainConfig, offchainConfigVersion, offchainConfig,
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrContractConnection, err.Error())
 	}
 
 	if err := deployer.wait(ctx, trx); err != nil {
-		return err
+		return fmt.Errorf("%w: %s", ErrContractConnection, err.Error())
 	}
 
 	return nil
@@ -331,9 +203,9 @@ func (d *RegistryV21Deployable) deployLogicB(
 		opts,
 		deployer.Client,
 		d.rCfg.Mode,
-		common.HexToAddress(d.rCfg.LinkTokenAddr),
-		common.HexToAddress(d.rCfg.LinkETHFeedAddr),
-		common.HexToAddress(d.rCfg.FastGasFeedAddr),
+		common.HexToAddress(d.link.Address),
+		common.HexToAddress(d.linkFeed.Address),
+		common.HexToAddress(d.gasFeed.Address),
 		forwarderAddr,
 	)
 
@@ -422,4 +294,139 @@ func (d *RegistryV21Deployable) deployRegistry(
 	// fmt.Printf("registry deployed to: %s\n", util.ExplorerLink(deployer.Config.ChainID, trx.Hash()))
 
 	return registryAddr, nil
+}
+
+func makeOracles(
+	nodeConfs []config.NodeConfig,
+) ([]int, []ocr2config.OracleIdentityExtra, []ocr2types.ConfigEncryptionPublicKey, error) {
+	var (
+		Svar    = make([]int, len(nodeConfs))
+		oracles = make([]ocr2config.OracleIdentityExtra, len(nodeConfs))
+		keys    = make([]ocr2types.ConfigEncryptionPublicKey, len(nodeConfs))
+	)
+
+	for idx, nodeConf := range nodeConfs {
+		offchainPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.OffChainPublicKey, "ocr2off_evm_"))
+		if err != nil {
+			return Svar, oracles, keys, fmt.Errorf("failed to decode %s: %v", nodeConf.OffChainPublicKey, err)
+		}
+
+		offchainPkBytesFixed := [ed25519.PublicKeySize]byte{}
+		nBts := copy(offchainPkBytesFixed[:], offchainPkBytes)
+
+		if nBts != ed25519.PublicKeySize {
+			return Svar, oracles, keys, fmt.Errorf("%w: wrong num elements copied; offchain", ErrConfiguration)
+		}
+
+		configPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.ConfigPublicKey, "ocr2cfg_evm_"))
+		if err != nil {
+			return Svar, oracles, keys, fmt.Errorf("failed to decode %s: %v", nodeConf.ConfigPublicKey, err)
+		}
+
+		configPkBytesFixed := [ed25519.PublicKeySize]byte{}
+		nBts = copy(configPkBytesFixed[:], configPkBytes)
+
+		if nBts != ed25519.PublicKeySize {
+			return Svar, oracles, keys, fmt.Errorf("%w: wrong num elements copied; config", ErrConfiguration)
+		}
+
+		onchainPkBytes, err := hex.DecodeString(strings.TrimPrefix(nodeConf.OnchainPublicKey, "ocr2on_evm_"))
+		if err != nil {
+			return Svar, oracles, keys, fmt.Errorf("failed to decode %s: %v", nodeConf.OnchainPublicKey, err)
+		}
+
+		keys[idx] = configPkBytesFixed
+		oracles[idx] = ocr2config.OracleIdentityExtra{
+			OracleIdentity: ocr2config.OracleIdentity{
+				OnchainPublicKey:  onchainPkBytes,
+				OffchainPublicKey: offchainPkBytesFixed,
+				PeerID:            nodeConf.P2PKeyID,
+				TransmitAccount:   ocr2types.Account(nodeConf.Address),
+			},
+			ConfigEncryptionPublicKey: configPkBytesFixed,
+		}
+
+		Svar[idx] = 1
+	}
+
+	return Svar, oracles, keys, nil
+}
+
+func makeOCRConfigs(
+	conf *config.AutomationRegistryV21Contract,
+	svar []int,
+	oracles []ocr2config.OracleIdentityExtra,
+) ([]ocr2types.OnchainPublicKey, []ocr2types.Account, uint8, uint64, []byte, error) {
+	var (
+		signerOnchainPublicKeys []ocr2types.OnchainPublicKey
+		transmitterAccounts     []ocr2types.Account
+		offchainConfigVersion   uint64
+		offchainConfig          []byte
+		faultyNodes             uint8
+		err                     error
+	)
+
+	offC, err := json.Marshal(offchain21config.OffchainConfig{
+		PerformLockoutWindow: conf.Offchain.PerformLockoutWindow, // 100 * 3 * 1000, // ~100 block lockout (on mumbai)
+		MinConfirmations:     conf.Offchain.MinConfirmations,
+		TargetProbability:    conf.Offchain.TargetProbability,
+		TargetInRounds:       conf.Offchain.TargetInRounds,
+		GasLimitPerReport:    conf.Offchain.GasLimitPerReport,
+		GasOverheadPerUpkeep: conf.Offchain.GasOverheadPerUpkeep,
+		MaxUpkeepBatchSize:   conf.Offchain.MaxUpkeepBatchSize,
+	})
+	if err != nil {
+		return nil, nil, 0, 0, nil, fmt.Errorf("%w: %s", ErrConfiguration, err.Error())
+	}
+
+	//nolint:lll
+	signerOnchainPublicKeys, transmitterAccounts, faultyNodes, _, offchainConfigVersion, offchainConfig, err = ocr3confighelper.ContractSetConfigArgsForTests(
+		conf.OCRNetwork.DeltaProgress,
+		conf.OCRNetwork.DeltaResend,
+		conf.OCRNetwork.DeltaInitial,
+		conf.OCRNetwork.DeltaRound,
+		conf.OCRNetwork.DeltaGrace,
+		conf.OCRNetwork.DeltaCertifiedCommitRequest,
+		conf.OCRNetwork.DeltaStage,
+		conf.OCRNetwork.MaxRounds,
+		svar,    // s []int,
+		oracles, // oracles []OracleIdentityExtra,
+		offC,    // reportingPluginConfig []byte,
+		conf.OCRNetwork.MaxDurationQuery,
+		conf.OCRNetwork.MaxDurationObservation,
+		conf.OCRNetwork.MaxDurationShouldAcceptFinalizedReport,
+		conf.OCRNetwork.MaxDurationShouldTransmitAcceptedReport,
+		conf.OCRNetwork.MaxFaultyNodes,
+		nil, // onchainConfig []byte,
+	)
+	if err != nil {
+		return nil, nil, 0, 0, nil, fmt.Errorf("%w: %s", ErrConfiguration, err.Error())
+	}
+
+	return signerOnchainPublicKeys, transmitterAccounts, faultyNodes, offchainConfigVersion, offchainConfig, nil
+}
+
+func makeOnchainConfig(onchain config.AutomationV21OnchainConfig) iregistry.KeeperRegistryBase21OnchainConfig {
+	registrars := make([]common.Address, len(onchain.Registrars))
+	for idx := range registrars {
+		registrars[idx] = common.HexToAddress(onchain.Registrars[idx])
+	}
+
+	return iregistry.KeeperRegistryBase21OnchainConfig{
+		PaymentPremiumPPB:      onchain.PaymentPremiumPPB,
+		FlatFeeMicroLink:       onchain.FlatFeeMicroLink,
+		CheckGasLimit:          onchain.CheckGasLimit,
+		StalenessSeconds:       big.NewInt(onchain.StalenessSeconds),
+		GasCeilingMultiplier:   onchain.GasCeilingMultiplier,
+		MinUpkeepSpend:         big.NewInt(onchain.MinUpkeepSpend),
+		MaxPerformGas:          onchain.MaxPerformGas,
+		MaxCheckDataSize:       onchain.MaxCheckDataSize,
+		MaxPerformDataSize:     onchain.MaxPerformDataSize,
+		MaxRevertDataSize:      onchain.MaxRevertDataSize,
+		FallbackGasPrice:       big.NewInt(onchain.FallbackGasPrice),
+		FallbackLinkPrice:      big.NewInt(onchain.FallbackLinkPrice),
+		Transcoder:             common.HexToAddress(onchain.Transcoder),
+		Registrars:             registrars,
+		UpkeepPrivilegeManager: common.HexToAddress(onchain.UpkeepPrivilegeManager),
+	}
 }

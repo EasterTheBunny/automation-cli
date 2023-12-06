@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"github.com/easterthebunny/automation-cli/internal/config"
 )
 
 const (
@@ -26,47 +28,43 @@ ListenAddresses = ["0.0.0.0:%s"]`
 // address, returns the tcp address of the node.
 func CreateBootstrapNode(
 	ctx context.Context,
-	conf NodeConfig,
-	groupname, image, addr string,
-	uiPort, p2pv2Port int,
+	groupname, registryAddr string,
+	conf *config.NodeConfig,
 	path string,
 	reset bool,
-) (string, error) {
-	const containerName = "bootstrap"
-
+) error {
 	node, err := buildChainlinkNode(
 		ctx, io.Discard, conf,
 		dockerNodeConfig{
-			Port:          uint16(uiPort),
+			Port:          conf.ListenPort,
 			Group:         groupname,
-			ContainerName: containerName,
-			Image:         image,
-			ExtraTOML:     fmt.Sprintf(bootstrapTOML, strconv.Itoa(p2pv2Port)),
+			ContainerName: conf.Name,
+			Image:         conf.Image,
+			ExtraTOML:     fmt.Sprintf(bootstrapTOML, strconv.Itoa(int(conf.BootstrapListenPort))),
 			BasePath:      path,
 			Reset:         reset,
 		},
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	urlRaw := node.URL()
+	conf.ManagementURL = node.URL()
 
-	client, err := authenticate(ctx, urlRaw, DefaultChainlinkNodeLogin, DefaultChainlinkNodePassword)
+	client, err := authenticate(ctx, conf.ManagementURL, conf.LoginName, conf.LoginPassword)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	p2pKeyID, err := getP2PKeyID(client)
-	if err != nil {
-		return "", err
+	if conf.P2PKeyID, err = getP2PKeyID(client); err != nil {
+		return err
 	}
 
-	if err = createBootstrapJob(client, addr, conf.ChainID); err != nil {
-		return "", err
+	if err = createBootstrapJob(client, registryAddr, conf.ChainID); err != nil {
+		return err
 	}
 
-	tcpAddr := fmt.Sprintf("%s@%s-%s:%d", p2pKeyID, groupname, containerName, p2pv2Port)
+	conf.BootstrapAddress = fmt.Sprintf("%s@%s-%s:%d", conf.P2PKeyID, groupname, conf.Name, conf.BootstrapListenPort)
 
-	return tcpAddr, nil
+	return nil
 }

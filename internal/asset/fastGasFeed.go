@@ -7,25 +7,23 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/smartcontractkit/chainlink/v2/core/gethwrappers/generated/mock_gas_aggregator_wrapper"
-)
 
-type FeedConfig struct {
-	Answer uint64
-}
+	"github.com/easterthebunny/automation-cli/internal/config"
+)
 
 type FastGasFeedDeployable struct {
 	contract *mock_gas_aggregator_wrapper.MockGASAggregator
-	config   *FeedConfig
+	config   *config.FeedContract
 }
 
-func NewFastGasFeedDeployable(config *FeedConfig) *FastGasFeedDeployable {
+func NewFastGasFeedDeployable(conf *config.FeedContract) *FastGasFeedDeployable {
 	return &FastGasFeedDeployable{
-		config: config,
+		config: conf,
 	}
 }
 
-func (d *FastGasFeedDeployable) Connect(_ context.Context, addr string, deployer *Deployer) (common.Address, error) {
-	return d.connectToInterface(common.HexToAddress(addr), deployer)
+func (d *FastGasFeedDeployable) Connect(_ context.Context, deployer *Deployer) (common.Address, error) {
+	return d.connectToInterface(common.HexToAddress(d.config.Address), deployer)
 }
 
 func (d *FastGasFeedDeployable) Deploy(
@@ -42,7 +40,7 @@ func (d *FastGasFeedDeployable) Deploy(
 	contractAddr, trx, _, err := mock_gas_aggregator_wrapper.DeployMockGASAggregator(
 		opts,
 		deployer.Client,
-		new(big.Int).SetUint64(d.config.Answer),
+		new(big.Int).SetUint64(d.config.DefaultAnswer),
 	)
 	if err != nil {
 		return contractAddr, fmt.Errorf("%w: fast gas feed creation failed: %s", ErrContractCreate, err.Error())
@@ -51,6 +49,8 @@ func (d *FastGasFeedDeployable) Deploy(
 	if err := deployer.waitDeployment(ctx, trx); err != nil {
 		return contractAddr, err
 	}
+
+	d.config.Address = contractAddr.Hex()
 
 	return contractAddr, nil
 }

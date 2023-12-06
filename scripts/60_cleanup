@@ -1,0 +1,3 @@
+#!/bin/bash
+
+automation-cli network participant remove --all --environment="geth.local"

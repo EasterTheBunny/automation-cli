@@ -1,10 +1,9 @@
 package node
 
-import "fmt"
+import (
+	"fmt"
 
-const (
-	DefaultChainlinkNodePassword = "fj293fbBnlQ!f9vNs~#"
-	DefaultChainlinkNodeLogin    = "notreal@fakeemail.ch"
+	"github.com/easterthebunny/automation-cli/internal/config"
 )
 
 const (
@@ -65,22 +64,10 @@ contractVersion = "%s"
 mercuryCredentialName = "%s"`
 )
 
-type NodeConfig struct {
-	ChainID     int64
-	NodeWSSURL  string
-	NodeHttpURL string
-	LogLevel    string
-
-	MercuryLegacyURL string
-	MercuryURL       string
-	MercuryID        string
-	MercuryKey       string
+func NodeTOML(conf config.NodeConfig) string {
+	return fmt.Sprintf(nodeTOML, conf.LogLevel, conf.ChainID, conf.WSURL, conf.HTTPURL)
 }
 
-func NodeTOML(conf NodeConfig) string {
-	return fmt.Sprintf(nodeTOML, conf.LogLevel, conf.ChainID, conf.NodeWSSURL, conf.NodeHttpURL)
-}
-
-func SecretTOML(conf NodeConfig) string {
+func SecretTOML(conf config.NodeConfig) string {
 	return fmt.Sprintf(secretTOML, conf.MercuryLegacyURL, conf.MercuryURL, conf.MercuryID, conf.MercuryKey)
 }
