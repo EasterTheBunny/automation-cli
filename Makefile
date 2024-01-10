@@ -16,7 +16,7 @@ race: dependencies
 	@go test -race $(GOPACKAGES)
 
 build: dependencies 
-	go build -o $(GOBIN)/automation-cli ./cmd/automation-cli/*.go || exit
+	go build -o $(GOBIN)/automation-cli ./*.go || exit
 
 install: dependencies
 	go install ./cmd/automation-cli/*.go || exit
